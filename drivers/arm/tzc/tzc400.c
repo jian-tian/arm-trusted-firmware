@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
@@ -33,7 +9,7 @@
 #include <mmio.h>
 #include <stddef.h>
 #include <tzc400.h>
-#include "tzc_common_private.c"
+#include "tzc_common_private.h"
 
 /*
  * Macros which will be used by common core functions.
@@ -58,7 +34,7 @@ typedef struct tzc400_instance {
 	uint8_t num_regions;
 } tzc400_instance_t;
 
-tzc400_instance_t tzc400;
+static tzc400_instance_t tzc400;
 
 static inline unsigned int _tzc400_read_build_config(uintptr_t base)
 {
@@ -78,7 +54,7 @@ static inline void _tzc400_write_gate_keeper(uintptr_t base, unsigned int val)
 /*
  * Get the open status information for all filter units.
  */
-#define get_gate_keeper_os(base)	((_tzc400_read_gate_keeper(base) >>	\
+#define get_gate_keeper_os(_base)	((_tzc400_read_gate_keeper(_base) >>  \
 					GATE_KEEPER_OS_SHIFT) &		\
 					GATE_KEEPER_OS_MASK)
 
@@ -229,13 +205,16 @@ void tzc400_enable_filters(void)
 	for (filter = 0; filter < tzc400.num_filters; filter++) {
 		state = _tzc400_get_gate_keeper(tzc400.base, filter);
 		if (state) {
-			/* The TZC filter is already configured. Changing the
+			/*
+			 * The TZC filter is already configured. Changing the
 			 * programmer's view in an active system can cause
 			 * unpredictable behavior therefore panic for now rather
 			 * than try to determine whether this is safe in this
-			 * instance. See:
-			 * http://infocenter.arm.com/help/index.jsp?\
-			 * topic=/com.arm.doc.ddi0504c/CJHHECBF.html */
+			 * instance.
+			 *
+			 * See the 'ARM (R) CoreLink TM TZC-400 TrustZone (R)
+			 * Address Space Controller' Technical Reference Manual.
+			 */
 			ERROR("TZC-400 : Filter %d Gatekeeper already"
 				" enabled.\n", filter);
 			panic();

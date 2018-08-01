@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef _PM_API_SYS_H_
@@ -33,6 +9,21 @@
 
 #include <stdint.h>
 #include "pm_defs.h"
+
+enum pm_query_id {
+	PM_QID_INVALID,
+	PM_QID_CLOCK_GET_NAME,
+	PM_QID_CLOCK_GET_TOPOLOGY,
+	PM_QID_CLOCK_GET_FIXEDFACTOR_PARAMS,
+	PM_QID_CLOCK_GET_PARENTS,
+	PM_QID_CLOCK_GET_ATTRIBUTES,
+	PM_QID_PINCTRL_GET_NUM_PINS,
+	PM_QID_PINCTRL_GET_NUM_FUNCTIONS,
+	PM_QID_PINCTRL_GET_NUM_FUNCTION_GROUPS,
+	PM_QID_PINCTRL_GET_FUNCTION_NAME,
+	PM_QID_PINCTRL_GET_FUNCTION_GROUPS,
+	PM_QID_PINCTRL_GET_PIN_GROUPS,
+};
 
 /**********************************************************
  * System-level API function declarations
@@ -61,7 +52,7 @@ enum pm_ret_status pm_set_wakeup_source(enum pm_node_id target,
 					enum pm_node_id wkup_node,
 					unsigned int enable);
 
-enum pm_ret_status pm_system_shutdown(unsigned int restart);
+enum pm_ret_status pm_system_shutdown(unsigned int type, unsigned int subtype);
 
 enum pm_ret_status pm_init_suspend_cb(enum pm_suspend_reason reason,
 				      unsigned int latency,
@@ -85,7 +76,9 @@ enum pm_ret_status pm_set_max_latency(enum pm_node_id nid,
 /* Miscellaneous API functions */
 enum pm_ret_status pm_get_api_version(unsigned int *version);
 enum pm_ret_status pm_set_configuration(unsigned int phys_addr);
-enum pm_ret_status pm_get_node_status(enum pm_node_id node);
+enum pm_ret_status pm_init_finalize(void);
+enum pm_ret_status pm_get_node_status(enum pm_node_id node,
+				      uint32_t *ret_buff);
 enum pm_ret_status pm_register_notifier(enum pm_node_id nid,
 					unsigned int event,
 					unsigned int wake,
@@ -109,10 +102,67 @@ enum pm_ret_status pm_mmio_write(uintptr_t address,
 				 unsigned int mask,
 				 unsigned int value);
 enum pm_ret_status pm_mmio_read(uintptr_t address, unsigned int *value);
-enum pm_ret_status pm_fpga_load(uint32_t address_high,
-				uint32_t address_low,
+enum pm_ret_status pm_fpga_load(uint32_t address_low,
+				uint32_t address_high,
 				uint32_t size,
 				uint32_t flags);
 enum pm_ret_status pm_fpga_get_status(unsigned int *value);
 
+enum pm_ret_status pm_get_chipid(uint32_t *value);
+enum pm_ret_status pm_secure_rsaaes(uint32_t address_high,
+				    uint32_t address_low,
+				    uint32_t size,
+				    uint32_t flags);
+unsigned int pm_get_shutdown_scope(void);
+enum pm_ret_status pm_pinctrl_request(unsigned int pin);
+enum pm_ret_status pm_pinctrl_release(unsigned int pin);
+enum pm_ret_status pm_pinctrl_get_function(unsigned int pin,
+					   enum pm_node_id *nid);
+enum pm_ret_status pm_pinctrl_set_function(unsigned int pin,
+					   enum pm_node_id nid);
+enum pm_ret_status pm_pinctrl_get_config(unsigned int pin,
+					 unsigned int param,
+					 unsigned int *value);
+enum pm_ret_status pm_pinctrl_set_config(unsigned int pin,
+					 unsigned int param,
+					 unsigned int value);
+enum pm_ret_status pm_ioctl(enum pm_node_id nid,
+			    unsigned int ioctl_id,
+			    unsigned int arg1,
+			    unsigned int arg2,
+			    unsigned int *value);
+enum pm_ret_status pm_clock_enable(unsigned int clock_id);
+enum pm_ret_status pm_clock_disable(unsigned int clock_id);
+enum pm_ret_status pm_clock_getstate(unsigned int clock_id,
+				     unsigned int *state);
+enum pm_ret_status pm_clock_setdivider(unsigned int clock_id,
+				       unsigned int divider);
+enum pm_ret_status pm_clock_getdivider(unsigned int clock_id,
+				       unsigned int *divider);
+enum pm_ret_status pm_clock_setrate(unsigned int clock_id,
+				    uint64_t rate);
+enum pm_ret_status pm_clock_getrate(unsigned int clock_id,
+				    uint64_t *rate);
+enum pm_ret_status pm_clock_setparent(unsigned int clock_id,
+				      unsigned int parent_id);
+enum pm_ret_status pm_clock_getparent(unsigned int clock_id,
+				      unsigned int *parent_id);
+enum pm_ret_status pm_query_data(enum pm_query_id qid,
+				 unsigned int arg1,
+				 unsigned int arg2,
+				 unsigned int arg3,
+				 unsigned int *data);
+enum pm_ret_status pm_sha_hash(uint32_t address_high,
+				    uint32_t address_low,
+				    uint32_t size,
+				    uint32_t flags);
+enum pm_ret_status pm_rsa_core(uint32_t address_high,
+				    uint32_t address_low,
+				    uint32_t size,
+				    uint32_t flags);
+enum pm_ret_status pm_secure_image(uint32_t address_low,
+				   uint32_t address_high,
+				   uint32_t key_lo,
+				   uint32_t key_hi,
+				   uint32_t *value);
 #endif /* _PM_API_SYS_H_ */

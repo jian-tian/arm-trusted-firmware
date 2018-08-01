@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 /*******************************************************************************
@@ -39,8 +15,8 @@
  ******************************************************************************/
 #include <arch_helpers.h>
 #include <assert.h>
-#include <bl_common.h>
 #include <bl31.h>
+#include <bl_common.h>
 #include <context_mgmt.h>
 #include <debug.h>
 #include <errno.h>
@@ -58,19 +34,24 @@ extern const spd_pm_ops_t tlkd_pm_ops;
  ******************************************************************************/
 tlk_context_t tlk_ctx;
 
-/* TLK UID: RFC-4122 compliant UUID (version-5, sha-1) */
-DEFINE_SVC_UUID(tlk_uuid,
-		0xbd11e9c9, 0x2bba, 0x52ee, 0xb1, 0x72,
-		0x46, 0x1f, 0xba, 0x97, 0x7f, 0x63);
+/*******************************************************************************
+ * CPU number on which TLK booted up
+ ******************************************************************************/
+static uint32_t boot_cpu;
 
-int32_t tlkd_init(void);
+/* TLK UID: RFC-4122 compliant UUID (version-5, sha-1) */
+DEFINE_SVC_UUID2(tlk_uuid,
+	0xc9e911bd, 0xba2b, 0xee52, 0xb1, 0x72,
+	0x46, 0x1f, 0xba, 0x97, 0x7f, 0x63);
+
+static int32_t tlkd_init(void);
 
 /*******************************************************************************
  * Secure Payload Dispatcher setup. The SPD finds out the SP entrypoint and type
  * (aarch32/aarch64) if not already known and initialises the context for entry
  * into the SP for its initialisation.
  ******************************************************************************/
-int32_t tlkd_setup(void)
+static int32_t tlkd_setup(void)
 {
 	entry_point_info_t *tlk_ep_info;
 
@@ -119,7 +100,7 @@ int32_t tlkd_setup(void)
  * used. This function performs a synchronous entry into the Secure payload.
  * The SP passes control back to this routine through a SMC.
  ******************************************************************************/
-int32_t tlkd_init(void)
+static int32_t tlkd_init(void)
 {
 	entry_point_info_t *tlk_entry_point;
 
@@ -131,6 +112,12 @@ int32_t tlkd_init(void)
 	assert(tlk_entry_point);
 
 	cm_init_my_context(tlk_entry_point);
+
+	/*
+	 * TLK runs only on a single CPU. Store the value of the boot
+	 * CPU for sanity checking later.
+	 */
+	boot_cpu = plat_my_core_pos();
 
 	/*
 	 * Arrange for an entry into the test secure payload.
@@ -146,14 +133,14 @@ int32_t tlkd_init(void)
  * will also return any information that the secure payload needs to do the
  * work assigned to it.
  ******************************************************************************/
-uint64_t tlkd_smc_handler(uint32_t smc_fid,
-			 uint64_t x1,
-			 uint64_t x2,
-			 uint64_t x3,
-			 uint64_t x4,
+static uintptr_t tlkd_smc_handler(uint32_t smc_fid,
+			 u_register_t x1,
+			 u_register_t x2,
+			 u_register_t x3,
+			 u_register_t x4,
 			 void *cookie,
 			 void *handle,
-			 uint64_t flags)
+			 u_register_t flags)
 {
 	cpu_context_t *ns_cpu_context;
 	gp_regs_t *gp_regs;
@@ -163,8 +150,8 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 	/* Passing a NULL context is a critical programming error */
 	assert(handle);
 
-	/* These SMCs are only supported by CPU0 */
-	if ((read_mpidr() & MPIDR_CPU_MASK) != 0)
+	/* These SMCs are only supported by a single CPU */
+	if (boot_cpu != plat_my_core_pos())
 		SMC_RET1(handle, SMC_UNK);
 
 	/* Determine which security state this SMC originated from */
@@ -206,12 +193,14 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 	 * b. register shared memory with the SP for passing args
 	 *    required for maintaining sessions with the Trusted
 	 *    Applications.
-	 * c. open/close sessions
-	 * d. issue commands to the Trusted Apps
-	 * e. resume the preempted standard SMC call.
+	 * c. register non-secure world's memory map with the OS
+	 * d. open/close sessions
+	 * e. issue commands to the Trusted Apps
+	 * f. resume the preempted yielding SMC call.
 	 */
 	case TLK_REGISTER_LOGBUF:
 	case TLK_REGISTER_REQBUF:
+	case TLK_REGISTER_NS_DRAM:
 	case TLK_OPEN_TA_SESSION:
 	case TLK_CLOSE_TA_SESSION:
 	case TLK_TA_LAUNCH_OP:
@@ -230,15 +219,15 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		assert(handle == cm_get_context(NON_SECURE));
 
 		/*
-		 * Check if we are already processing a standard SMC
+		 * Check if we are already processing a yielding SMC
 		 * call. Of all the supported fids, only the "resume"
 		 * fid expects the flag to be set.
 		 */
 		if (smc_fid == TLK_RESUME_FID) {
-			if (!get_std_smc_active_flag(tlk_ctx.state))
+			if (!get_yield_smc_active_flag(tlk_ctx.state))
 				SMC_RET1(handle, SMC_UNK);
 		} else {
-			if (get_std_smc_active_flag(tlk_ctx.state))
+			if (get_yield_smc_active_flag(tlk_ctx.state))
 				SMC_RET1(handle, SMC_UNK);
 		}
 
@@ -252,7 +241,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		/*
 		 * Mark the SP state as active.
 		 */
-		set_std_smc_active_flag(tlk_ctx.state);
+		set_yield_smc_active_flag(tlk_ctx.state);
 
 		/*
 		 * We are done stashing the non-secure context. Ask the
@@ -311,7 +300,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 
 	/*
 	 * This is a request from the SP to mark completion of
-	 * a standard function ID.
+	 * a yielding function ID.
 	 */
 	case TLK_REQUEST_DONE:
 		if (ns)
@@ -320,7 +309,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		/*
 		 * Mark the SP state as inactive.
 		 */
-		clr_std_smc_active_flag(tlk_ctx.state);
+		clr_yield_smc_active_flag(tlk_ctx.state);
 
 		/* Get a reference to the non-secure context */
 		ns_cpu_context = cm_get_context(NON_SECURE);
@@ -361,6 +350,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		 * context.
 		 */
 		tlkd_synchronous_sp_exit(&tlk_ctx, x1);
+		break;
 
 	/*
 	 * These function IDs are used only by TLK to indicate it has
@@ -386,6 +376,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		 * return value to the caller
 		 */
 		tlkd_synchronous_sp_exit(&tlk_ctx, x1);
+		break;
 
 	/*
 	 * Return the number of service function IDs implemented to
@@ -424,13 +415,13 @@ DECLARE_RT_SVC(
 	tlkd_smc_handler
 );
 
-/* Define a SPD runtime service descriptor for standard SMC calls */
+/* Define a SPD runtime service descriptor for yielding SMC calls */
 DECLARE_RT_SVC(
 	tlkd_tos_std,
 
 	OEN_TOS_START,
 	OEN_TOS_END,
-	SMC_TYPE_STD,
+	SMC_TYPE_YIELD,
 	NULL,
 	tlkd_smc_handler
 );
@@ -446,13 +437,13 @@ DECLARE_RT_SVC(
 	tlkd_smc_handler
 );
 
-/* Define a SPD runtime service descriptor for standard SMC calls */
+/* Define a SPD runtime service descriptor for yielding SMC calls */
 DECLARE_RT_SVC(
 	tlkd_tap_std,
 
 	OEN_TAP_START,
 	OEN_TAP_END,
-	SMC_TYPE_STD,
+	SMC_TYPE_YIELD,
 	NULL,
 	tlkd_smc_handler
 );

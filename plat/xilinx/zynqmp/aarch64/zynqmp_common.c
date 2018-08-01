@@ -1,39 +1,18 @@
 /*
  * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <debug.h>
 #include <generic_delay_timer.h>
 #include <mmio.h>
 #include <platform.h>
+#include <stdbool.h>
+#include <string.h>
 #include <xlat_tables.h>
 #include "../zynqmp_private.h"
+#include "pm_api_sys.h"
 
 /*
  * Table of regions to map using the MMU.
@@ -49,11 +28,14 @@ const mmap_region_t plat_arm_mmap[] = {
 
 static unsigned int zynqmp_get_silicon_ver(void)
 {
-	unsigned int ver;
+	static unsigned int ver;
 
-	ver = mmio_read_32(ZYNQMP_CSU_BASEADDR + ZYNQMP_CSU_VERSION_OFFSET);
-	ver &= ZYNQMP_SILICON_VER_MASK;
-	ver >>= ZYNQMP_SILICON_VER_SHIFT;
+	if (!ver) {
+		ver = mmio_read_32(ZYNQMP_CSU_BASEADDR +
+				   ZYNQMP_CSU_VERSION_OFFSET);
+		ver &= ZYNQMP_SILICON_VER_MASK;
+		ver >>= ZYNQMP_SILICON_VER_SHIFT;
+	}
 
 	return ver;
 }
@@ -69,75 +51,113 @@ unsigned int zynqmp_get_uart_clk(void)
 		return 25000000;
 	case ZYNQMP_CSU_VERSION_QEMU:
 		return 133000000;
+	default:
+		/* Do nothing in default case */
+		break;
 	}
 
 	return 100000000;
-}
-
-static unsigned int zynqmp_get_system_timer_freq(void)
-{
-	unsigned int ver = zynqmp_get_silicon_ver();
-
-	switch (ver) {
-	case ZYNQMP_CSU_VERSION_VELOCE:
-		return 10000;
-	case ZYNQMP_CSU_VERSION_EP108:
-		return 4000000;
-	case ZYNQMP_CSU_VERSION_QEMU:
-		return 50000000;
-	}
-
-	return 100000000;
-}
-
-unsigned int zynqmp_get_silicon_id(void)
-{
-	uint32_t id;
-
-	id = mmio_read_32(ZYNQMP_CSU_BASEADDR + ZYNQMP_CSU_IDCODE_OFFSET);
-
-	id &= ZYNQMP_CSU_IDCODE_DEVICE_CODE_MASK | ZYNQMP_CSU_IDCODE_SVD_MASK;
-	id >>= ZYNQMP_CSU_IDCODE_SVD_SHIFT;
-
-	return id;
 }
 
 #if LOG_LEVEL >= LOG_LEVEL_NOTICE
 static const struct {
 	unsigned int id;
+	unsigned int ver;
 	char *name;
+	bool evexists;
 } zynqmp_devices[] = {
 	{
 		.id = 0x10,
 		.name = "3EG",
 	},
 	{
+		.id = 0x10,
+		.ver = 0x2c,
+		.name = "3CG",
+	},
+	{
 		.id = 0x11,
 		.name = "2EG",
 	},
 	{
+		.id = 0x11,
+		.ver = 0x2c,
+		.name = "2CG",
+	},
+	{
 		.id = 0x20,
 		.name = "5EV",
+		.evexists = true,
+	},
+	{
+		.id = 0x20,
+		.ver = 0x100,
+		.name = "5EG",
+		.evexists = true,
+	},
+	{
+		.id = 0x20,
+		.ver = 0x12c,
+		.name = "5CG",
 	},
 	{
 		.id = 0x21,
 		.name = "4EV",
+		.evexists = true,
+	},
+	{
+		.id = 0x21,
+		.ver = 0x100,
+		.name = "4EG",
+		.evexists = true,
+	},
+	{
+		.id = 0x21,
+		.ver = 0x12c,
+		.name = "4CG",
 	},
 	{
 		.id = 0x30,
 		.name = "7EV",
+		.evexists = true,
+	},
+	{
+		.id = 0x30,
+		.ver = 0x100,
+		.name = "7EG",
+		.evexists = true,
+	},
+	{
+		.id = 0x30,
+		.ver = 0x12c,
+		.name = "7CG",
 	},
 	{
 		.id = 0x38,
 		.name = "9EG",
 	},
 	{
+		.id = 0x38,
+		.ver = 0x2c,
+		.name = "9CG",
+	},
+	{
 		.id = 0x39,
 		.name = "6EG",
 	},
 	{
+		.id = 0x39,
+		.ver = 0x2c,
+		.name = "6CG",
+	},
+	{
 		.id = 0x40,
 		.name = "11EG",
+	},
+	{ /* For testing purpose only */
+		.id = 0x50,
+		.ver = 0x2c,
+		.name = "15CG",
 	},
 	{
 		.id = 0x50,
@@ -151,18 +171,84 @@ static const struct {
 		.id = 0x59,
 		.name = "17EG",
 	},
+	{
+		.id = 0x60,
+		.name = "28DR",
+	},
+	{
+		.id = 0x61,
+		.name = "21DR",
+	},
+	{
+		.id = 0x62,
+		.name = "29DR",
+	},
+	{
+		.id = 0x63,
+		.name = "23DR",
+	},
+	{
+		.id = 0x64,
+		.name = "27DR",
+	},
+	{
+		.id = 0x65,
+		.name = "25DR",
+	},
 };
+
+#define ZYNQMP_PL_STATUS_BIT	9
+#define ZYNQMP_PL_STATUS_MASK	BIT(ZYNQMP_PL_STATUS_BIT)
+#define ZYNQMP_CSU_VERSION_MASK	~(ZYNQMP_PL_STATUS_MASK)
 
 static char *zynqmp_get_silicon_idcode_name(void)
 {
-	unsigned int id;
+	uint32_t id, ver, chipid[2];
+	size_t i, j, len;
+	const char *name = "EG/EV";
 
-	id = zynqmp_get_silicon_id();
-	for (size_t i = 0; i < ARRAY_SIZE(zynqmp_devices); i++) {
-		if (zynqmp_devices[i].id == id)
-			return zynqmp_devices[i].name;
+#ifdef IMAGE_BL32
+	/*
+	 * For BL32, get the chip id info directly by reading corresponding
+	 * registers instead of making pm call. This has limitation
+	 * that these registers should be configured to have access
+	 * from APU which is default case.
+	 */
+	chipid[0] = mmio_read_32(ZYNQMP_CSU_BASEADDR + ZYNQMP_CSU_IDCODE_OFFSET);
+	chipid[1] = mmio_read_32(EFUSE_BASEADDR + EFUSE_IPDISABLE_OFFSET);
+#else
+	if (pm_get_chipid(chipid) != PM_RET_SUCCESS)
+		return "UNKN";
+#endif
+
+	id = chipid[0] & (ZYNQMP_CSU_IDCODE_DEVICE_CODE_MASK |
+			  ZYNQMP_CSU_IDCODE_SVD_MASK);
+	id >>= ZYNQMP_CSU_IDCODE_SVD_SHIFT;
+	ver = chipid[1] >> ZYNQMP_EFUSE_IPDISABLE_SHIFT;
+
+	for (i = 0; i < ARRAY_SIZE(zynqmp_devices); i++) {
+		if (zynqmp_devices[i].id == id &&
+		    zynqmp_devices[i].ver == (ver & ZYNQMP_CSU_VERSION_MASK))
+			break;
 	}
-	return "UNKN";
+
+	if (i >= ARRAY_SIZE(zynqmp_devices))
+		return "UNKN";
+
+	if (!zynqmp_devices[i].evexists)
+		return zynqmp_devices[i].name;
+
+	if (ver & ZYNQMP_PL_STATUS_MASK)
+		return zynqmp_devices[i].name;
+
+	len = strlen(zynqmp_devices[i].name) - 2;
+	for (j = 0; j < strlen(name); j++) {
+		zynqmp_devices[i].name[len] = name[j];
+		len++;
+	}
+	zynqmp_devices[i].name[len] = '\0';
+
+	return zynqmp_devices[i].name;
 }
 
 static unsigned int zynqmp_get_rtl_ver(void)
@@ -224,82 +310,53 @@ static void zynqmp_print_platform_name(void)
 	case ZYNQMP_CSU_VERSION_SILICON:
 		label = "silicon";
 		break;
+	default:
+		/* Do nothing in default case */
+		break;
 	}
 
-	NOTICE("ATF running on XCZU%s/%s v%d/RTL%d.%d at 0x%x%s\n",
+	NOTICE("ATF running on XCZU%s/%s v%d/RTL%d.%d at 0x%x\n",
 	       zynqmp_print_silicon_idcode(), label, zynqmp_get_ps_ver(),
-	       (rtl & 0xf0) >> 4, rtl & 0xf, BL31_BASE,
-	       zynqmp_is_pmu_up() ? ", with PMU firmware" : "");
+	       (rtl & 0xf0) >> 4, rtl & 0xf, BL31_BASE);
 }
 #else
 static inline void zynqmp_print_platform_name(void) { }
 #endif
 
-/*
- * Indicator for PMUFW discovery:
- *   0 = No FW found
- *   non-zero = FW is present
- */
-static int zynqmp_pmufw_present;
-
-/*
- * zynqmp_discover_pmufw - Discover presence of PMUFW
- *
- * Discover the presence of PMUFW and store it for later run-time queries
- * through zynqmp_is_pmu_up.
- * NOTE: This discovery method is fragile and will break if:
- *  - setting FW_PRESENT is done by PMUFW itself and could be left out in PMUFW
- *    (be it by error or intentionally)
- *  - XPPU/XMPU may restrict ATF's access to the PMU address space
- */
-static int zynqmp_discover_pmufw(void)
-{
-	zynqmp_pmufw_present = mmio_read_32(PMU_GLOBAL_CNTRL);
-	zynqmp_pmufw_present &= PMU_GLOBAL_CNTRL_FW_IS_PRESENT;
-
-	return !!zynqmp_pmufw_present;
-}
-
-/*
- * zynqmp_is_pmu_up - Find if PMU firmware is up and running
- *
- * Return 0 if firmware is not available, non 0 otherwise
- */
-int zynqmp_is_pmu_up(void)
-{
-	return zynqmp_pmufw_present;
-}
-
 unsigned int zynqmp_get_bootmode(void)
 {
-	uint32_t r = mmio_read_32(CRL_APB_BOOT_MODE_USER);
+	uint32_t r;
+	unsigned int ret;
+
+	ret = pm_mmio_read(CRL_APB_BOOT_MODE_USER, &r);
+
+	if (ret != PM_RET_SUCCESS)
+		r = mmio_read_32(CRL_APB_BOOT_MODE_USER);
 
 	return r & CRL_APB_BOOT_MODE_MASK;
 }
 
 void zynqmp_config_setup(void)
 {
-	zynqmp_discover_pmufw();
 	zynqmp_print_platform_name();
-
-	/* Global timer init - Program time stamp reference clk */
-	uint32_t val = mmio_read_32(CRL_APB_TIMESTAMP_REF_CTRL);
-	val |= CRL_APB_TIMESTAMP_REF_CTRL_CLKACT_BIT;
-	mmio_write_32(CRL_APB_TIMESTAMP_REF_CTRL, val);
-
-	/* Program freq register in System counter and enable system counter. */
-	mmio_write_32(IOU_SCNTRS_BASEFREQ, zynqmp_get_system_timer_freq());
-	mmio_write_32(IOU_SCNTRS_CONTROL, IOU_SCNTRS_CONTROL_EN);
-
 	generic_delay_timer_init();
 }
 
 unsigned int plat_get_syscnt_freq2(void)
 {
-	unsigned int counter_base_frequency;
+	unsigned int ver = zynqmp_get_silicon_ver();
 
-	/* FIXME: Read the frequency from Frequency modes table */
-	counter_base_frequency = zynqmp_get_system_timer_freq();
+	switch (ver) {
+	case ZYNQMP_CSU_VERSION_VELOCE:
+		return 10000;
+	case ZYNQMP_CSU_VERSION_EP108:
+		return 4000000;
+	case ZYNQMP_CSU_VERSION_QEMU:
+		return 50000000;
+	default:
+		/* Do nothing in default case */
+		break;
+	}
 
-	return counter_base_frequency;
+	return mmio_read_32(IOU_SCNTRS_BASEFREQ);
 }

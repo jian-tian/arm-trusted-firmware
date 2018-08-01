@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2017, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
@@ -33,7 +9,7 @@
 #include <mmio.h>
 #include <tzc_dmc500.h>
 #include "tzc_common.h"
-#include "tzc_common_private.c"
+#include "tzc_common_private.h"
 
 /*
  * Macros which will be used by common core functions.
@@ -49,6 +25,7 @@
 
 /* Pointer to the tzc_dmc500_driver_data structure populated by the platform */
 static const tzc_dmc500_driver_data_t *g_driver_data;
+static unsigned int g_sys_if_count;
 
 #define verify_region_attr(region, attr)	\
 		((g_conf_regions[(region)].sec_attr ==			\
@@ -112,7 +89,7 @@ void tzc_dmc500_config_complete(void)
 
 	for (dmc_inst = 0; dmc_inst < g_driver_data->dmc_count; dmc_inst++) {
 		assert(DMC_INST_BASE_ADDR(dmc_inst));
-		for (sys_if = 0; sys_if < MAX_SYS_IF_COUNT; sys_if++)
+		for (sys_if = 0; sys_if < g_sys_if_count; sys_if++)
 			_tzc_dmc500_write_flush_control(
 					DMC_INST_SI_BASE(dmc_inst, sys_if));
 	}
@@ -143,7 +120,7 @@ int tzc_dmc500_verify_complete(void)
 		for (dmc_inst = 0; dmc_inst < g_driver_data->dmc_count;
 								dmc_inst++) {
 			assert(DMC_INST_BASE_ADDR(dmc_inst));
-			for (sys_if = 0; sys_if < MAX_SYS_IF_COUNT;
+			for (sys_if = 0; sys_if < g_sys_if_count;
 							sys_if++) {
 				attr = _tzc_dmc500_read_region_attr_0(
 					DMC_INST_SI_BASE(dmc_inst, sys_if),
@@ -178,7 +155,7 @@ void tzc_dmc500_configure_region0(tzc_region_attributes_t sec_attr,
 	/* Configure region_0 in all DMC instances */
 	for (dmc_inst = 0; dmc_inst < g_driver_data->dmc_count; dmc_inst++) {
 		assert(DMC_INST_BASE_ADDR(dmc_inst));
-		for (sys_if = 0; sys_if < MAX_SYS_IF_COUNT; sys_if++)
+		for (sys_if = 0; sys_if < g_sys_if_count; sys_if++)
 			_tzc_dmc500_configure_region0(
 					DMC_INST_SI_BASE(dmc_inst, sys_if),
 					sec_attr, nsaid_permissions);
@@ -219,7 +196,7 @@ void tzc_dmc500_configure_region(int region_no,
 
 	for (dmc_inst = 0; dmc_inst < g_driver_data->dmc_count; dmc_inst++) {
 		assert(DMC_INST_BASE_ADDR(dmc_inst));
-		for (sys_if = 0; sys_if < MAX_SYS_IF_COUNT; sys_if++)
+		for (sys_if = 0; sys_if < g_sys_if_count; sys_if++)
 			_tzc_dmc500_configure_region(
 					DMC_INST_SI_BASE(dmc_inst, sys_if),
 					TZC_DMC500_REGION_ATTR_F_EN_MASK,
@@ -257,7 +234,7 @@ void tzc_dmc500_set_action(tzc_action_t action)
 static void validate_plat_driver_data(
 			const tzc_dmc500_driver_data_t *plat_driver_data)
 {
-#if DEBUG
+#if ENABLE_ASSERTIONS
 	int i;
 	unsigned int dmc_id;
 	uintptr_t dmc_base;
@@ -273,7 +250,7 @@ static void validate_plat_driver_data(
 		dmc_id = _tzc_read_peripheral_id(dmc_base);
 		assert(dmc_id == DMC500_PERIPHERAL_ID);
 	}
-#endif /* DEBUG */
+#endif /* ENABLE_ASSERTIONS */
 }
 
 
@@ -296,4 +273,13 @@ void tzc_dmc500_driver_init(const tzc_dmc500_driver_data_t *plat_driver_data)
 	/* Validates the information passed by platform */
 	validate_plat_driver_data(plat_driver_data);
 	g_driver_data = plat_driver_data;
+
+	/* Check valid system interface count */
+	assert(g_driver_data->sys_if_count <= MAX_SYS_IF_COUNT);
+
+	g_sys_if_count = g_driver_data->sys_if_count;
+
+	/* If interface count is not present then assume max */
+	if (g_sys_if_count == 0U)
+		g_sys_if_count = MAX_SYS_IF_COUNT;
 }

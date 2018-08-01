@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <bl_common.h>
@@ -92,7 +68,7 @@ static bl_mem_params_node_t bl2_mem_params_descs[] = {
 	    .ep_info.spsr = SPSR_64(MODE_EL3, MODE_SP_ELX,
 		    DISABLE_ALL_EXCEPTIONS),
 #if DEBUG
-	    .ep_info.args.arg1 = ARM_BL31_PLAT_PARAM_VAL,
+	    .ep_info.args.arg3 = ARM_BL31_PLAT_PARAM_VAL,
 #endif
 
 	    SET_STATIC_PARAM_HEAD(image_info, PARAM_EP,
@@ -106,7 +82,24 @@ static bl_mem_params_node_t bl2_mem_params_descs[] = {
 	    .next_handoff_image_id = BL33_IMAGE_ID,
 # endif
     },
-
+	/* Fill HW_CONFIG related information */
+    {
+	    .image_id = HW_CONFIG_ID,
+	    SET_STATIC_PARAM_HEAD(ep_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, entry_point_info_t, NON_SECURE | NON_EXECUTABLE),
+	    SET_STATIC_PARAM_HEAD(image_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, image_info_t, IMAGE_ATTRIB_SKIP_LOADING),
+	    .next_handoff_image_id = INVALID_IMAGE_ID,
+    },
+	/* Fill SOC_FW_CONFIG related information */
+    {
+	    .image_id = SOC_FW_CONFIG_ID,
+	    SET_STATIC_PARAM_HEAD(ep_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, entry_point_info_t, SECURE | NON_EXECUTABLE),
+	    SET_STATIC_PARAM_HEAD(image_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, image_info_t, IMAGE_ATTRIB_SKIP_LOADING),
+	    .next_handoff_image_id = INVALID_IMAGE_ID,
+    },
 # ifdef BL32_BASE
 	/* Fill BL32 related information */
     {
@@ -122,6 +115,53 @@ static bl_mem_params_node_t bl2_mem_params_descs[] = {
 	    .image_info.image_max_size = BL32_LIMIT - BL32_BASE,
 
 	    .next_handoff_image_id = BL33_IMAGE_ID,
+    },
+
+	/*
+	 * Fill BL32 external 1 related information.
+	 * A typical use for extra1 image is with OP-TEE where it is the pager image.
+	 */
+    {
+	    .image_id = BL32_EXTRA1_IMAGE_ID,
+
+	    SET_STATIC_PARAM_HEAD(ep_info, PARAM_EP,
+		    VERSION_2, entry_point_info_t, SECURE | NON_EXECUTABLE),
+
+	    SET_STATIC_PARAM_HEAD(image_info, PARAM_EP,
+		    VERSION_2, image_info_t, IMAGE_ATTRIB_SKIP_LOADING),
+	    .image_info.image_base = BL32_BASE,
+	    .image_info.image_max_size = BL32_LIMIT - BL32_BASE,
+
+	    .next_handoff_image_id = INVALID_IMAGE_ID,
+    },
+
+	/*
+	 * Fill BL32 external 2 related information.
+	 * A typical use for extra2 image is with OP-TEE where it is the paged image.
+	 */
+    {
+	    .image_id = BL32_EXTRA2_IMAGE_ID,
+
+	    SET_STATIC_PARAM_HEAD(ep_info, PARAM_EP,
+		    VERSION_2, entry_point_info_t, SECURE | NON_EXECUTABLE),
+
+	    SET_STATIC_PARAM_HEAD(image_info, PARAM_EP,
+		    VERSION_2, image_info_t, IMAGE_ATTRIB_SKIP_LOADING),
+#ifdef SPD_opteed
+	    .image_info.image_base = ARM_OPTEE_PAGEABLE_LOAD_BASE,
+	    .image_info.image_max_size = ARM_OPTEE_PAGEABLE_LOAD_SIZE,
+#endif
+	    .next_handoff_image_id = INVALID_IMAGE_ID,
+    },
+
+	/* Fill TOS_FW_CONFIG related information */
+    {
+	    .image_id = TOS_FW_CONFIG_ID,
+	    SET_STATIC_PARAM_HEAD(ep_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, entry_point_info_t, SECURE | NON_EXECUTABLE),
+	    SET_STATIC_PARAM_HEAD(image_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, image_info_t, IMAGE_ATTRIB_SKIP_LOADING),
+	    .next_handoff_image_id = INVALID_IMAGE_ID,
     },
 # endif /* BL32_BASE */
 
@@ -144,6 +184,15 @@ static bl_mem_params_node_t bl2_mem_params_descs[] = {
 	    .image_info.image_max_size = ARM_DRAM1_SIZE,
 # endif /* PRELOADED_BL33_BASE */
 
+	    .next_handoff_image_id = INVALID_IMAGE_ID,
+    },
+	/* Fill NT_FW_CONFIG related information */
+    {
+	    .image_id = NT_FW_CONFIG_ID,
+	    SET_STATIC_PARAM_HEAD(ep_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, entry_point_info_t, NON_SECURE | NON_EXECUTABLE),
+	    SET_STATIC_PARAM_HEAD(image_info, PARAM_IMAGE_BINARY,
+		    VERSION_2, image_info_t, IMAGE_ATTRIB_SKIP_LOADING),
 	    .next_handoff_image_id = INVALID_IMAGE_ID,
     }
 #endif /* EL3_PAYLOAD_BASE */

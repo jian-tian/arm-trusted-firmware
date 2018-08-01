@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch_helpers.h>
@@ -41,7 +17,7 @@
  * The target cpu is being turned on. Allow the TSPD/TSP to perform any actions
  * needed. Nothing at the moment.
  ******************************************************************************/
-static void tspd_cpu_on_handler(uint64_t target_cpu)
+static void tspd_cpu_on_handler(u_register_t target_cpu)
 {
 }
 
@@ -49,7 +25,7 @@ static void tspd_cpu_on_handler(uint64_t target_cpu)
  * This cpu is being turned off. Allow the TSPD/TSP to perform any actions
  * needed
  ******************************************************************************/
-static int32_t tspd_cpu_off_handler(uint64_t unused)
+static int32_t tspd_cpu_off_handler(u_register_t unused)
 {
 	int32_t rc = 0;
 	uint32_t linear_id = plat_my_core_pos();
@@ -57,6 +33,12 @@ static int32_t tspd_cpu_off_handler(uint64_t unused)
 
 	assert(tsp_vectors);
 	assert(get_tsp_pstate(tsp_ctx->state) == TSP_PSTATE_ON);
+
+	/*
+	 * Abort any preempted SMC request before overwriting the SECURE
+	 * context.
+	 */
+	tspd_abort_preempted_smc(tsp_ctx);
 
 	/* Program the entry point and enter the TSP */
 	cm_set_elr_el3(SECURE, (uint64_t) &tsp_vectors->cpu_off_entry);
@@ -75,14 +57,14 @@ static int32_t tspd_cpu_off_handler(uint64_t unused)
 	 */
 	set_tsp_pstate(tsp_ctx->state, TSP_PSTATE_OFF);
 
-	 return 0;
+	return 0;
 }
 
 /*******************************************************************************
  * This cpu is being suspended. S-EL1 state must have been saved in the
  * resident cpu (mpidr format) if it is a UP/UP migratable TSP.
  ******************************************************************************/
-static void tspd_cpu_suspend_handler(uint64_t max_off_pwrlvl)
+static void tspd_cpu_suspend_handler(u_register_t max_off_pwrlvl)
 {
 	int32_t rc = 0;
 	uint32_t linear_id = plat_my_core_pos();
@@ -90,6 +72,12 @@ static void tspd_cpu_suspend_handler(uint64_t max_off_pwrlvl)
 
 	assert(tsp_vectors);
 	assert(get_tsp_pstate(tsp_ctx->state) == TSP_PSTATE_ON);
+
+	/*
+	 * Abort any preempted SMC request before overwriting the SECURE
+	 * context.
+	 */
+	tspd_abort_preempted_smc(tsp_ctx);
 
 	/* Program the entry point and enter the TSP */
 	cm_set_elr_el3(SECURE, (uint64_t) &tsp_vectors->cpu_suspend_entry);
@@ -99,7 +87,7 @@ static void tspd_cpu_suspend_handler(uint64_t max_off_pwrlvl)
 	 * Read the response from the TSP. A non-zero return means that
 	 * something went wrong while communicating with the TSP.
 	 */
-	if (rc != 0)
+	if (rc)
 		panic();
 
 	/* Update its context to reflect the state the TSP is in */
@@ -108,11 +96,11 @@ static void tspd_cpu_suspend_handler(uint64_t max_off_pwrlvl)
 
 /*******************************************************************************
  * This cpu has been turned on. Enter the TSP to initialise S-EL1 and other bits
- * before passing control back to the Secure Monitor. Entry in S-El1 is done
+ * before passing control back to the Secure Monitor. Entry in S-EL1 is done
  * after initialising minimal architectural state that guarantees safe
  * execution.
  ******************************************************************************/
-static void tspd_cpu_on_finish_handler(uint64_t unused)
+static void tspd_cpu_on_finish_handler(u_register_t unused)
 {
 	int32_t rc = 0;
 	uint32_t linear_id = plat_my_core_pos();
@@ -157,7 +145,7 @@ static void tspd_cpu_on_finish_handler(uint64_t unused)
  * completed the preceding suspend call. Use that context to program an entry
  * into the TSP to allow it to do any remaining book keeping
  ******************************************************************************/
-static void tspd_cpu_suspend_finish_handler(uint64_t max_off_pwrlvl)
+static void tspd_cpu_suspend_finish_handler(u_register_t max_off_pwrlvl)
 {
 	int32_t rc = 0;
 	uint32_t linear_id = plat_my_core_pos();
@@ -188,7 +176,7 @@ static void tspd_cpu_suspend_finish_handler(uint64_t max_off_pwrlvl)
  * Return the type of TSP the TSPD is dealing with. Report the current resident
  * cpu (mpidr format) if it is a UP/UP migratable TSP.
  ******************************************************************************/
-static int32_t tspd_cpu_migrate_info(uint64_t *resident_cpu)
+static int32_t tspd_cpu_migrate_info(u_register_t *resident_cpu)
 {
 	return TSP_MIGRATE_INFO;
 }
@@ -204,6 +192,12 @@ static void tspd_system_off(void)
 
 	assert(tsp_vectors);
 	assert(get_tsp_pstate(tsp_ctx->state) == TSP_PSTATE_ON);
+
+	/*
+	 * Abort any preempted SMC request before overwriting the SECURE
+	 * context.
+	 */
+	tspd_abort_preempted_smc(tsp_ctx);
 
 	/* Program the entry point */
 	cm_set_elr_el3(SECURE, (uint64_t) &tsp_vectors->system_off_entry);
@@ -225,11 +219,19 @@ static void tspd_system_reset(void)
 	assert(tsp_vectors);
 	assert(get_tsp_pstate(tsp_ctx->state) == TSP_PSTATE_ON);
 
+	/*
+	 * Abort any preempted SMC request before overwriting the SECURE
+	 * context.
+	 */
+	tspd_abort_preempted_smc(tsp_ctx);
+
 	/* Program the entry point */
 	cm_set_elr_el3(SECURE, (uint64_t) &tsp_vectors->system_reset_entry);
 
-	/* Enter the TSP. We do not care about the return value because we
-	 * must continue the reset anyway */
+	/*
+	 * Enter the TSP. We do not care about the return value because we
+	 * must continue the reset anyway
+	 */
 	tspd_synchronous_sp_entry(tsp_ctx);
 }
 

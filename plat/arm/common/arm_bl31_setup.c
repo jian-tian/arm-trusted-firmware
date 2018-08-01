@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
@@ -38,20 +14,9 @@
 #include <mmio.h>
 #include <plat_arm.h>
 #include <platform.h>
+#include <ras.h>
 
 #define BL31_END (uintptr_t)(&__BL31_END__)
-
-#if USE_COHERENT_MEM
-/*
- * The next 2 constants identify the extents of the coherent memory region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __COHERENT_RAM_START__ and __COHERENT_RAM_END__ linker symbols
- * refer to page-aligned addresses.
- */
-#define BL31_COHERENT_RAM_BASE (uintptr_t)(&__COHERENT_RAM_START__)
-#define BL31_COHERENT_RAM_LIMIT (uintptr_t)(&__COHERENT_RAM_END__)
-#endif
 
 /*
  * Placeholder variables for copying the arguments that have been passed to
@@ -60,13 +25,22 @@
 static entry_point_info_t bl32_image_ep_info;
 static entry_point_info_t bl33_image_ep_info;
 
+/*
+ * Check that BL31_BASE is above ARM_TB_FW_CONFIG_LIMIT. The reserved page
+ * is required for SOC_FW_CONFIG/TOS_FW_CONFIG passed from BL2.
+ */
+CASSERT(BL31_BASE >= ARM_TB_FW_CONFIG_LIMIT, assert_bl31_base_overflows);
 
 /* Weak definitions may be overridden in specific ARM standard platform */
-#pragma weak bl31_early_platform_setup
+#pragma weak bl31_early_platform_setup2
 #pragma weak bl31_platform_setup
 #pragma weak bl31_plat_arch_setup
 #pragma weak bl31_plat_get_next_image_ep_info
 
+#define MAP_BL31_TOTAL	MAP_REGION_FLAT(			\
+					BL31_BASE,			\
+					BL31_END - BL31_BASE,		\
+					MT_MEMORY | MT_RW | MT_SECURE)
 
 /*******************************************************************************
  * Return a pointer to the 'entry_point_info' structure of the next image for the
@@ -74,7 +48,7 @@ static entry_point_info_t bl33_image_ep_info;
  * while BL32 corresponds to the secure image type. A NULL pointer is returned
  * if the image does not exist.
  ******************************************************************************/
-entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
+struct entry_point_info *bl31_plat_get_next_image_ep_info(uint32_t type)
 {
 	entry_point_info_t *next_image_info;
 
@@ -100,23 +74,22 @@ entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
  * we are guaranteed to pick up good data.
  ******************************************************************************/
 #if LOAD_IMAGE_V2
-void arm_bl31_early_platform_setup(void *from_bl2,
-				void *plat_params_from_bl2)
+void arm_bl31_early_platform_setup(void *from_bl2, uintptr_t soc_fw_config,
+				uintptr_t hw_config, void *plat_params_from_bl2)
 #else
-void arm_bl31_early_platform_setup(bl31_params_t *from_bl2,
-				void *plat_params_from_bl2)
+void arm_bl31_early_platform_setup(bl31_params_t *from_bl2, uintptr_t soc_fw_config,
+				uintptr_t hw_config, void *plat_params_from_bl2)
 #endif
 {
 	/* Initialize the console to provide early debug support */
-	console_init(PLAT_ARM_BOOT_UART_BASE, PLAT_ARM_BOOT_UART_CLK_IN_HZ,
-			ARM_CONSOLE_BAUDRATE);
+	arm_console_boot_init();
 
 #if RESET_TO_BL31
 	/* There are no parameters from BL2 if BL31 is a reset vector */
 	assert(from_bl2 == NULL);
 	assert(plat_params_from_bl2 == NULL);
 
-#ifdef BL32_BASE
+# ifdef BL32_BASE
 	/* Populate entry point information for BL32 */
 	SET_PARAM_HEAD(&bl32_image_ep_info,
 				PARAM_EP,
@@ -125,7 +98,7 @@ void arm_bl31_early_platform_setup(bl31_params_t *from_bl2,
 	SET_SECURITY_STATE(bl32_image_ep_info.h.attr, SECURE);
 	bl32_image_ep_info.pc = BL32_BASE;
 	bl32_image_ep_info.spsr = arm_get_spsr_for_bl32_entry();
-#endif /* BL32_BASE */
+# endif /* BL32_BASE */
 
 	/* Populate entry point information for BL33 */
 	SET_PARAM_HEAD(&bl33_image_ep_info,
@@ -140,6 +113,19 @@ void arm_bl31_early_platform_setup(bl31_params_t *from_bl2,
 
 	bl33_image_ep_info.spsr = arm_get_spsr_for_bl33_entry();
 	SET_SECURITY_STATE(bl33_image_ep_info.h.attr, NON_SECURE);
+
+# if ARM_LINUX_KERNEL_AS_BL33
+	/*
+	 * According to the file ``Documentation/arm64/booting.txt`` of the
+	 * Linux kernel tree, Linux expects the physical address of the device
+	 * tree blob (DTB) in x0, while x1-x3 are reserved for future use and
+	 * must be 0.
+	 */
+	bl33_image_ep_info.args.arg0 = (u_register_t)ARM_PRELOADED_DTB_BASE;
+	bl33_image_ep_info.args.arg1 = 0U;
+	bl33_image_ep_info.args.arg2 = 0U;
+	bl33_image_ep_info.args.arg3 = 0U;
+# endif
 
 #else /* RESET_TO_BL31 */
 
@@ -188,6 +174,10 @@ void arm_bl31_early_platform_setup(bl31_params_t *from_bl2,
 	assert(from_bl2->h.type == PARAM_BL31);
 	assert(from_bl2->h.version >= VERSION_1);
 
+	/* Dynamic Config is not supported for LOAD_IMAGE_V1 */
+	assert(soc_fw_config == 0);
+	assert(hw_config == 0);
+
 	/*
 	 * Copy BL32 (if populated by BL2) and BL33 entry point information.
 	 * They are stored in Secure RAM, in BL2's address space.
@@ -200,15 +190,10 @@ void arm_bl31_early_platform_setup(bl31_params_t *from_bl2,
 #endif /* RESET_TO_BL31 */
 }
 
-#if LOAD_IMAGE_V2
-void bl31_early_platform_setup(void *from_bl2,
-				void *plat_params_from_bl2)
-#else
-void bl31_early_platform_setup(bl31_params_t *from_bl2,
-				void *plat_params_from_bl2)
-#endif
+void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+		u_register_t arg2, u_register_t arg3)
 {
-	arm_bl31_early_platform_setup(from_bl2, plat_params_from_bl2);
+	arm_bl31_early_platform_setup((void *)arg0, arg1, arg2, (void *)arg3);
 
 	/*
 	 * Initialize Interconnect for this cluster during cold boot.
@@ -243,6 +228,10 @@ void arm_bl31_platform_setup(void)
 	 */
 	plat_arm_security_setup();
 
+#if defined(PLAT_ARM_MEM_PROT_ADDR)
+	arm_nor_psci_do_dyn_mem_protect();
+#endif /* PLAT_ARM_MEM_PROT_ADDR */
+
 #endif /* RESET_TO_BL31 */
 
 	/* Enable and initialize the System level generic timer */
@@ -254,17 +243,27 @@ void arm_bl31_platform_setup(void)
 
 	/* Initialize power controller before setting up topology */
 	plat_arm_pwrc_setup();
+
+#if RAS_EXTENSION
+	ras_init();
+#endif
 }
 
 /*******************************************************************************
  * Perform any BL31 platform runtime setup prior to BL31 exit common to ARM
  * standard platforms
+ * Perform BL31 platform setup
  ******************************************************************************/
 void arm_bl31_plat_runtime_setup(void)
 {
+#if MULTI_CONSOLE_API
+	console_switch_state(CONSOLE_FLAG_RUNTIME);
+#else
+	console_uninit();
+#endif
+
 	/* Initialize the runtime console */
-	console_init(PLAT_ARM_BL31_RUN_UART_BASE, PLAT_ARM_BL31_RUN_UART_CLK_IN_HZ,
-			ARM_CONSOLE_BAUDRATE);
+	arm_console_runtime_init();
 }
 
 void bl31_platform_setup(void)
@@ -285,17 +284,19 @@ void bl31_plat_runtime_setup(void)
  ******************************************************************************/
 void arm_bl31_plat_arch_setup(void)
 {
-	arm_setup_page_tables(BL31_BASE,
-			      BL31_END - BL31_BASE,
-			      BL_CODE_BASE,
-			      BL_CODE_LIMIT,
-			      BL_RO_DATA_BASE,
-			      BL_RO_DATA_LIMIT
+
+	const mmap_region_t bl_regions[] = {
+		MAP_BL31_TOTAL,
+		ARM_MAP_BL_CODE,
+		ARM_MAP_BL_RO_DATA,
 #if USE_COHERENT_MEM
-			      , BL31_COHERENT_RAM_BASE,
-			      BL31_COHERENT_RAM_LIMIT
+		ARM_MAP_BL_COHERENT_RAM,
 #endif
-			      );
+		{0}
+	};
+
+	arm_setup_page_tables(bl_regions, plat_arm_get_mmap());
+
 	enable_mmu_el3(0);
 }
 

@@ -1,39 +1,15 @@
 /*
- * Copyright (c) 2014-2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
 #include <common_def.h>
 #include <debug.h>
 #include <io_driver.h>
-#include <io_storage.h>
 #include <io_semihosting.h>
+#include <io_storage.h>
 #include <plat_arm.h>
 #include <semihosting.h>	/* For FOPEN_MODE_... */
 
@@ -42,6 +18,8 @@
 #define BL31_IMAGE_NAME			"bl31.bin"
 #define BL32_IMAGE_NAME			"bl32.bin"
 #define BL33_IMAGE_NAME			"bl33.bin"
+#define TB_FW_CONFIG_NAME		"fvp_tb_fw_config.dtb"
+#define HW_CONFIG_NAME			"hw_config.dtb"
 
 #if TRUSTED_BOARD_BOOT
 #define TRUSTED_BOOT_FW_CERT_NAME	"tb_fw.crt"
@@ -73,6 +51,14 @@ static const io_file_spec_t sh_file_spec[] = {
 	},
 	[BL33_IMAGE_ID] = {
 		.path = BL33_IMAGE_NAME,
+		.mode = FOPEN_MODE_RB
+	},
+	[TB_FW_CONFIG_ID] = {
+		.path = TB_FW_CONFIG_NAME,
+		.mode = FOPEN_MODE_RB
+	},
+	[HW_CONFIG_ID] = {
+		.path = HW_CONFIG_NAME,
 		.mode = FOPEN_MODE_RB
 	},
 #if TRUSTED_BOARD_BOOT

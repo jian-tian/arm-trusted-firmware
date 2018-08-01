@@ -1,49 +1,22 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch_helpers.h>
 #include <arm_def.h>
 #include <arm_gic.h>
 #include <assert.h>
-#include <console.h>
 #include <errno.h>
 #include <plat_arm.h>
+#include <platform.h>
 #include <platform_def.h>
 #include <psci.h>
 
-/* Standard ARM platforms are expected to export plat_arm_psci_pm_ops */
-extern const plat_psci_ops_t plat_arm_psci_pm_ops;
-
-#if ARM_RECOM_STATE_ID_ENC
-extern unsigned int arm_pm_idle_states[];
-#endif /* __ARM_RECOM_STATE_ID_ENC__ */
+/* Allow ARM Standard platforms to override these functions */
+#pragma weak plat_arm_psci_override_pm_ops
+#pragma weak plat_arm_program_trusted_mailbox
 
 #if !ARM_RECOM_STATE_ID_ENC
 /*******************************************************************************
@@ -53,11 +26,11 @@ extern unsigned int arm_pm_idle_states[];
 int arm_validate_power_state(unsigned int power_state,
 			    psci_power_state_t *req_state)
 {
-	int pstate = psci_get_pstate_type(power_state);
-	int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
-	int i;
+	unsigned int pstate = psci_get_pstate_type(power_state);
+	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
+	unsigned int i;
 
-	assert(req_state);
+	assert(req_state > 0U);
 
 	if (pwr_lvl > PLAT_MAX_PWR_LVL)
 		return PSCI_E_INVALID_PARAMS;
@@ -82,7 +55,7 @@ int arm_validate_power_state(unsigned int power_state,
 	/*
 	 * We expect the 'state id' to be zero.
 	 */
-	if (psci_get_pstate_id(power_state))
+	if (psci_get_pstate_id(power_state) != 0U)
 		return PSCI_E_INVALID_PARAMS;
 
 	return PSCI_E_SUCCESS;
@@ -132,7 +105,7 @@ int arm_validate_power_state(unsigned int power_state,
 
 /*******************************************************************************
  * ARM standard platform handler called to check the validity of the non secure
- * entrypoint.
+ * entrypoint. Returns 0 if the entrypoint is valid, or -1 otherwise.
  ******************************************************************************/
 int arm_validate_ns_entrypoint(uintptr_t entrypoint)
 {
@@ -141,13 +114,55 @@ int arm_validate_ns_entrypoint(uintptr_t entrypoint)
 	 * secure DRAM.
 	 */
 	if ((entrypoint >= ARM_NS_DRAM1_BASE) && (entrypoint <
-			(ARM_NS_DRAM1_BASE + ARM_NS_DRAM1_SIZE)))
-		return PSCI_E_SUCCESS;
+			(ARM_NS_DRAM1_BASE + ARM_NS_DRAM1_SIZE))) {
+		return 0;
+	}
+#ifndef AARCH32
 	if ((entrypoint >= ARM_DRAM2_BASE) && (entrypoint <
-			(ARM_DRAM2_BASE + ARM_DRAM2_SIZE)))
-		return PSCI_E_SUCCESS;
+			(ARM_DRAM2_BASE + ARM_DRAM2_SIZE))) {
+		return 0;
+	}
+#endif
 
-	return PSCI_E_INVALID_ADDRESS;
+	return -1;
+}
+
+int arm_validate_psci_entrypoint(uintptr_t entrypoint)
+{
+	return arm_validate_ns_entrypoint(entrypoint) == 0 ? PSCI_E_SUCCESS :
+		PSCI_E_INVALID_ADDRESS;
+}
+
+/******************************************************************************
+ * Default definition on ARM standard platforms to override the plat_psci_ops.
+ *****************************************************************************/
+const plat_psci_ops_t *plat_arm_psci_override_pm_ops(plat_psci_ops_t *ops)
+{
+	return ops;
+}
+
+/******************************************************************************
+ * Helper function to save the platform state before a system suspend. Save the
+ * state of the system components which are not in the Always ON power domain.
+ *****************************************************************************/
+void arm_system_pwr_domain_save(void)
+{
+	/* Assert system power domain is available on the platform */
+	assert(PLAT_MAX_PWR_LVL >= ARM_PWR_LVL2);
+
+	plat_arm_gic_save();
+
+	/*
+	 * Unregister console now so that it is not registered for a second
+	 * time during resume.
+	 */
+	arm_console_runtime_end();
+
+	/*
+	 * All the other peripheral which are configured by ARM TF are
+	 * re-initialized on resume from system suspend. Hence we
+	 * don't save their state here.
+	 */
 }
 
 /******************************************************************************
@@ -158,28 +173,24 @@ int arm_validate_ns_entrypoint(uintptr_t entrypoint)
  *****************************************************************************/
 void arm_system_pwr_domain_resume(void)
 {
-	console_init(PLAT_ARM_BL31_RUN_UART_BASE, PLAT_ARM_BL31_RUN_UART_CLK_IN_HZ,
-						ARM_CONSOLE_BAUDRATE);
+	/* Initialize the console */
+	arm_console_runtime_init();
 
 	/* Assert system power domain is available on the platform */
 	assert(PLAT_MAX_PWR_LVL >= ARM_PWR_LVL2);
 
-	/*
-	 * TODO: On GICv3 systems, figure out whether the core that wakes up
-	 * first from system suspend need to initialize the re-distributor
-	 * interface of all the other suspended cores.
-	 */
-	plat_arm_gic_init();
+	plat_arm_gic_resume();
+
 	plat_arm_security_setup();
 	arm_configure_sys_timer();
 }
 
 /*******************************************************************************
- * Private function to program the mailbox for a cpu before it is released
+ * ARM platform function to program the mailbox for a cpu before it is released
  * from reset. This function assumes that the Trusted mail box base is within
  * the ARM_SHARED_RAM region
  ******************************************************************************/
-void arm_program_trusted_mailbox(uintptr_t address)
+void plat_arm_program_trusted_mailbox(uintptr_t address)
 {
 	uintptr_t *mailbox = (void *) PLAT_ARM_TRUSTED_MAILBOX_BASE;
 
@@ -201,9 +212,9 @@ void arm_program_trusted_mailbox(uintptr_t address)
 int plat_setup_psci_ops(uintptr_t sec_entrypoint,
 				const plat_psci_ops_t **psci_ops)
 {
-	*psci_ops = &plat_arm_psci_pm_ops;
+	*psci_ops = plat_arm_psci_override_pm_ops(&plat_arm_psci_pm_ops);
 
 	/* Setup mailbox with entry point. */
-	arm_program_trusted_mailbox(sec_entrypoint);
+	plat_arm_program_trusted_mailbox(sec_entrypoint);
 	return 0;
 }

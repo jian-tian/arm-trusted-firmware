@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <arch.h>
 #include <arch_helpers.h>
@@ -35,6 +11,7 @@
 #include <platform.h>
 #include <pmf.h>
 #include <string.h>
+#include <utils_def.h>
 
 /*******************************************************************************
  * The 'pmf_svc_descs' array holds the PMF service descriptors exported by
@@ -45,16 +22,12 @@
  * index of the descriptor in the 'pmf_svc_descs' array  which contains the
  * service function pointers.
  ******************************************************************************/
-extern uintptr_t __PMF_SVC_DESCS_START__;
-extern uintptr_t __PMF_SVC_DESCS_END__;
-#define PMF_SVC_DESCS_START		((uintptr_t)(&__PMF_SVC_DESCS_START__))
-#define PMF_SVC_DESCS_END		((uintptr_t)(&__PMF_SVC_DESCS_END__))
-extern void *__PERCPU_TIMESTAMP_SIZE__;
-#define PMF_PERCPU_TIMESTAMP_SIZE	((uintptr_t)&__PERCPU_TIMESTAMP_SIZE__)
-extern uintptr_t __PMF_TIMESTAMP_START__;
-#define PMF_TIMESTAMP_ARRAY_START	((uintptr_t)&__PMF_TIMESTAMP_START__)
-extern uintptr_t __PMF_TIMESTAMP_END__;
-#define PMF_TIMESTAMP_ARRAY_END		((uintptr_t)&__PMF_TIMESTAMP_END__)
+
+IMPORT_SYM(uintptr_t, __PMF_SVC_DESCS_START__,		PMF_SVC_DESCS_START);
+IMPORT_SYM(uintptr_t, __PMF_SVC_DESCS_END__,		PMF_SVC_DESCS_END);
+IMPORT_SYM(uintptr_t, __PERCPU_TIMESTAMP_SIZE__,	PMF_PERCPU_TIMESTAMP_SIZE);
+IMPORT_SYM(intptr_t,  __PMF_TIMESTAMP_START__,		PMF_TIMESTAMP_ARRAY_START);
+IMPORT_SYM(uintptr_t, __PMF_TIMESTAMP_END__,		PMF_TIMESTAMP_ARRAY_END);
 
 #define PMF_SVC_DESCS_MAX		10
 

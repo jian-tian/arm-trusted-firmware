@@ -1,31 +1,7 @@
 /*
  * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch_helpers.h>
@@ -33,6 +9,7 @@
 #include <debug.h>
 #include <mmio.h>
 #include "zynqmp_def.h"
+#include "zynqmp_private.h"
 
 /*
  * ATFHandoffParams
@@ -171,8 +148,11 @@ static int get_fsbl_estate(const struct xfsbl_partition *partition)
  *
  * Process the handoff paramters from the FSBL and populate the BL32 and BL33
  * image info structures accordingly.
+ *
+ * Return: Return the status of the handoff. The value will be from the
+ *         fsbl_handoff enum.
  */
-void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
+enum fsbl_handoff fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 {
 	uint64_t atf_handoff_addr;
 	const struct xfsbl_atf_handoff_params *ATFHandoffParams;
@@ -181,8 +161,8 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 	assert((atf_handoff_addr < BL31_BASE) ||
 	       (atf_handoff_addr > (uint64_t)&__BL31_END__));
 	if (!atf_handoff_addr) {
-		ERROR("BL31: No ATF handoff structure passed\n");
-		panic();
+		WARN("BL31: No ATF handoff structure passed\n");
+		return FSBL_HANDOFF_NO_STRUCT;
 	}
 
 	ATFHandoffParams = (struct xfsbl_atf_handoff_params *)atf_handoff_addr;
@@ -190,17 +170,17 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 	    (ATFHandoffParams->magic[1] != 'L') ||
 	    (ATFHandoffParams->magic[2] != 'N') ||
 	    (ATFHandoffParams->magic[3] != 'X')) {
-		ERROR("BL31: invalid ATF handoff structure at %lx\n",
+		ERROR("BL31: invalid ATF handoff structure at %llx\n",
 		      atf_handoff_addr);
-		panic();
+		return FSBL_HANDOFF_INVAL_STRUCT;
 	}
 
-	VERBOSE("BL31: ATF handoff params at:0x%lx, entries:%u\n",
+	VERBOSE("BL31: ATF handoff params at:0x%llx, entries:%u\n",
 		atf_handoff_addr, ATFHandoffParams->num_entries);
 	if (ATFHandoffParams->num_entries > FSBL_MAX_PARTITIONS) {
 		ERROR("BL31: ATF handoff params: too many partitions (%u/%u)\n",
 		      ATFHandoffParams->num_entries, FSBL_MAX_PARTITIONS);
-		panic();
+		return FSBL_HANDOFF_TOO_MANY_PARTS;
 	}
 
 	/*
@@ -213,7 +193,7 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 		int target_estate, target_secure;
 		int target_cpu, target_endianness, target_el;
 
-		VERBOSE("BL31: %zd: entry:0x%lx, flags:0x%lx\n", i,
+		VERBOSE("BL31: %zd: entry:0x%llx, flags:0x%llx\n", i,
 			ATFHandoffParams->partition[i].entry_point,
 			ATFHandoffParams->partition[i].flags);
 
@@ -274,7 +254,7 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 			}
 		}
 
-		VERBOSE("Setting up %s entry point to:%lx, el:%x\n",
+		VERBOSE("Setting up %s entry point to:%llx, el:%x\n",
 			target_secure == FSBL_FLAGS_SECURE ? "BL32" : "BL33",
 			ATFHandoffParams->partition[i].entry_point,
 			target_el);
@@ -285,4 +265,6 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 		else
 			EP_SET_EE(image->h.attr, EP_EE_LITTLE);
 	}
+
+	return FSBL_HANDOFF_SUCCESS;
 }

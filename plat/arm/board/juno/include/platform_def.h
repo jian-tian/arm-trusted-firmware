@@ -1,41 +1,32 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __PLATFORM_DEF_H__
 #define __PLATFORM_DEF_H__
+
+/* Enable the dynamic translation tables library. */
+#ifdef AARCH32
+# if defined(IMAGE_BL32) && RESET_TO_SP_MIN
+#  define PLAT_XLAT_TABLES_DYNAMIC     1
+# endif
+#else
+# if defined(IMAGE_BL31) && RESET_TO_BL31
+#  define PLAT_XLAT_TABLES_DYNAMIC     1
+# endif
+#endif /* AARCH32 */
+
 
 #include <arm_def.h>
 #include <board_arm_def.h>
 #include <board_css_def.h>
 #include <common_def.h>
 #include <css_def.h>
+#if TRUSTED_BOARD_BOOT
+#include <mbedtls_config.h>
+#endif
 #include <soc_css_def.h>
 #include <tzc400.h>
 #include <v2m_def.h>
@@ -50,6 +41,9 @@
 #define PLATFORM_CORE_COUNT		(JUNO_CLUSTER0_CORE_COUNT + \
 					JUNO_CLUSTER1_CORE_COUNT)
 
+/* Cryptocell HW Base address */
+#define PLAT_CRYPTOCELL_BASE		0x60050000
+
 /*
  * Other platform porting definitions are provided by included headers
  */
@@ -61,6 +55,12 @@
 
 /* Use the bypass address */
 #define PLAT_ARM_TRUSTED_ROM_BASE	V2M_FLASH0_BASE + BL1_ROM_BYPASS_OFFSET
+
+#define NSRAM_BASE			0x2e000000
+#define NSRAM_SIZE			0x00008000	/* 32KB */
+
+/* virtual address used by dynamic mem_protect for chunk_base */
+#define PLAT_ARM_MEM_PROTEC_VA_FRAME	0xc0000000
 
 /*
  * Actual ROM size on Juno is 64 KB, but TBB currently requires at least 80 KB
@@ -82,29 +82,34 @@
  * PLAT_ARM_MMAP_ENTRIES depends on the number of entries in the
  * plat_arm_mmap array defined for each BL stage.
  */
-#if IMAGE_BL1
+#ifdef IMAGE_BL1
 # define PLAT_ARM_MMAP_ENTRIES		7
 # define MAX_XLAT_TABLES		4
 #endif
 
-#if IMAGE_BL2
-# define PLAT_ARM_MMAP_ENTRIES		8
-# define MAX_XLAT_TABLES		3
+#ifdef IMAGE_BL2
+#ifdef SPD_opteed
+# define PLAT_ARM_MMAP_ENTRIES		11
+# define MAX_XLAT_TABLES		5
+#else
+# define PLAT_ARM_MMAP_ENTRIES		10
+# define MAX_XLAT_TABLES		4
+#endif
 #endif
 
-#if IMAGE_BL2U
-# define PLAT_ARM_MMAP_ENTRIES		4
-# define MAX_XLAT_TABLES		3
-#endif
-
-#if IMAGE_BL31
+#ifdef IMAGE_BL2U
 # define PLAT_ARM_MMAP_ENTRIES		5
-# define MAX_XLAT_TABLES		2
+# define MAX_XLAT_TABLES		3
 #endif
 
-#if IMAGE_BL32
-# define PLAT_ARM_MMAP_ENTRIES		4
-# define MAX_XLAT_TABLES		3
+#ifdef IMAGE_BL31
+#  define PLAT_ARM_MMAP_ENTRIES		7
+#  define MAX_XLAT_TABLES		3
+#endif
+
+#ifdef IMAGE_BL32
+# define PLAT_ARM_MMAP_ENTRIES		6
+# define MAX_XLAT_TABLES		4
 #endif
 
 /*
@@ -112,7 +117,7 @@
  * plus a little space for growth.
  */
 #if TRUSTED_BOARD_BOOT
-# define PLAT_ARM_MAX_BL1_RW_SIZE	0x9000
+# define PLAT_ARM_MAX_BL1_RW_SIZE	0xB000
 #else
 # define PLAT_ARM_MAX_BL1_RW_SIZE	0x6000
 #endif
@@ -122,16 +127,40 @@
  * little space for growth.
  */
 #if TRUSTED_BOARD_BOOT
+#if TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_RSA_AND_ECDSA
+# define PLAT_ARM_MAX_BL2_SIZE		0x1F000
+#elif TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_ECDSA
 # define PLAT_ARM_MAX_BL2_SIZE		0x1D000
 #else
-# define PLAT_ARM_MAX_BL2_SIZE		0xC000
+# define PLAT_ARM_MAX_BL2_SIZE		0x1C000
+#endif
+#else
+# define PLAT_ARM_MAX_BL2_SIZE		0xE000
 #endif
 
 /*
- * PLAT_ARM_MAX_BL31_SIZE is calculated using the current BL31 debug size plus a
- * little space for growth.
+ * Since BL31 NOBITS overlays BL2 and BL1-RW, PLAT_ARM_MAX_BL31_SIZE is
+ * calculated using the current BL31 PROGBITS debug size plus the sizes of
+ * BL2 and BL1-RW.  SCP_BL2 image is loaded into the space BL31 -> BL2_BASE.
+ * Hence the BL31 PROGBITS size should be >= PLAT_CSS_MAX_SCP_BL2_SIZE.
  */
-#define PLAT_ARM_MAX_BL31_SIZE		0x1D000
+#define PLAT_ARM_MAX_BL31_SIZE		0x3E000
+
+#if JUNO_AARCH32_EL3_RUNTIME
+/*
+ * Since BL32 NOBITS overlays BL2 and BL1-RW, PLAT_ARM_MAX_BL32_SIZE is
+ * calculated using the current BL32 PROGBITS debug size plus the sizes of
+ * BL2 and BL1-RW.  SCP_BL2 image is loaded into the space BL32 -> BL2_BASE.
+ * Hence the BL32 PROGBITS size should be >= PLAT_CSS_MAX_SCP_BL2_SIZE.
+ */
+#define PLAT_ARM_MAX_BL32_SIZE		0x3E000
+#endif
+
+/*
+ * Since free SRAM space is scant, enable the ASSERTION message size
+ * optimization by fixing the PLAT_LOG_LEVEL_ASSERT to LOG_LEVEL_INFO (40).
+ */
+#define PLAT_LOG_LEVEL_ASSERT		40
 
 #endif /* ARM_BOARD_OPTIMISE_MEM */
 
@@ -173,7 +202,9 @@
 /*
  * Base address of the first memory region used for communication between AP
  * and SCP. Used by the BOM and SCPI protocols.
- *
+ */
+#if !CSS_USE_SCMI_SDS_DRIVER
+/*
  * Note that this is located at the same address as SCP_BOOT_CFG_ADDR, which
  * means the SCP/AP configuration data gets overwritten when the AP initiates
  * communication with the SCP. The configuration data is expected to be a
@@ -183,30 +214,41 @@
 #define PLAT_CSS_SCP_COM_SHARED_MEM_BASE	(ARM_TRUSTED_SRAM_BASE + 0x80)
 #define PLAT_CSS_PRIMARY_CPU_SHIFT		8
 #define PLAT_CSS_PRIMARY_CPU_BIT_WIDTH		4
+#endif
 
 /*
  * PLAT_CSS_MAX_SCP_BL2_SIZE is calculated using the current
  * SCP_BL2 size plus a little space for growth.
  */
-#define PLAT_CSS_MAX_SCP_BL2_SIZE	0x1D000
+#define PLAT_CSS_MAX_SCP_BL2_SIZE	0x14000
 
 /*
- * Define a list of Group 1 Secure and Group 0 interrupts as per GICv3
- * terminology. On a GICv2 system or mode, the lists will be merged and treated
- * as Group 0 interrupts.
+ * PLAT_CSS_MAX_SCP_BL2U_SIZE is calculated using the current
+ * SCP_BL2U size plus a little space for growth.
  */
-#define PLAT_ARM_G1S_IRQS		CSS_G1S_IRQS,			\
-					ARM_G1S_IRQS,			\
-					JUNO_IRQ_DMA_SMMU,		\
-					JUNO_IRQ_HDLCD0_SMMU,		\
-					JUNO_IRQ_HDLCD1_SMMU,		\
-					JUNO_IRQ_USB_SMMU,		\
-					JUNO_IRQ_THIN_LINKS_SMMU,	\
-					JUNO_IRQ_SEC_I2C,		\
-					JUNO_IRQ_GPU_SMMU_1,		\
-					JUNO_IRQ_ETR_SMMU
+#define PLAT_CSS_MAX_SCP_BL2U_SIZE	0x14000
 
-#define PLAT_ARM_G0_IRQS		ARM_G0_IRQS
+#define PLAT_ARM_G1S_IRQ_PROPS(grp) \
+	CSS_G1S_IRQ_PROPS(grp), \
+	ARM_G1S_IRQ_PROPS(grp), \
+	INTR_PROP_DESC(JUNO_IRQ_DMA_SMMU, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_HDLCD0_SMMU, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_HDLCD1_SMMU, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_USB_SMMU, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_THIN_LINKS_SMMU, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_SEC_I2C, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_GPU_SMMU_1, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(JUNO_IRQ_ETR_SMMU, GIC_HIGHEST_SEC_PRIORITY, \
+		grp, GIC_INTR_CFG_LEVEL)
+
+#define PLAT_ARM_G0_IRQ_PROPS(grp)	ARM_G0_IRQ_PROPS(grp)
 
 /*
  * Required ARM CSS SoC based platform porting definitions
@@ -214,5 +256,8 @@
 
 /* CSS SoC NIC-400 Global Programmers View (GPV) */
 #define PLAT_SOC_CSS_NIC400_BASE	0x2a000000
+
+#define PLAT_ARM_PRIVATE_SDEI_EVENTS	ARM_SDEI_PRIVATE_EVENTS
+#define PLAT_ARM_SHARED_SDEI_EVENTS	ARM_SDEI_SHARED_EVENTS
 
 #endif /* __PLATFORM_DEF_H__ */

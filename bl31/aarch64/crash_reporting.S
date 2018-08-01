@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <arch.h>
 #include <asm_macros.S>
@@ -33,13 +9,13 @@
 #include <cpu_data.h>
 #include <plat_macros.S>
 #include <platform_def.h>
+#include <utils_def.h>
 
 	.globl	report_unhandled_exception
 	.globl	report_unhandled_interrupt
 	.globl	el3_panic
 
 #if CRASH_REPORTING
-#define REG_SIZE	0x8
 
 	/* ------------------------------------------------------
 	 * The below section deals with dumping the system state
@@ -70,8 +46,7 @@ non_el3_sys_regs:
 		"tpidrro_el0", "dacr32_el2", "ifsr32_el2", "par_el1",\
 		"mpidr_el1", "afsr0_el1", "afsr1_el1", "contextidr_el1",\
 		"vbar_el1", "cntp_ctl_el0", "cntp_cval_el0", "cntv_ctl_el0",\
-		"cntv_cval_el0", "cntkctl_el1", "fpexc32_el2", "sp_el0",\
-		"isr_el1", ""
+		"cntv_cval_el0", "cntkctl_el1", "sp_el0", "isr_el1", ""
 
 panic_msg:
 	.asciz "PANIC in EL3 at x30 = 0x"
@@ -117,7 +92,7 @@ test_size_list:
 	mov	x6, x4
 	adr	x4, print_spacer
 	bl	asm_print_str
-	ldr	x4, [x7], #REG_SIZE
+	ldr	x4, [x7], #REGSZ
 	bl	asm_print_hex
 	bl	print_newline
 	b	test_size_list
@@ -139,9 +114,9 @@ func str_in_crash_buf_print
 	/* restore the crash buf address in x0 */
 	mrs	x0, tpidr_el3
 	stp	x8, x9, [x0]
-	stp	x10, x11, [x0, #REG_SIZE * 2]
-	stp	x12, x13, [x0, #REG_SIZE * 4]
-	stp	x14, x15, [x0, #REG_SIZE * 6]
+	stp	x10, x11, [x0, #REGSZ * 2]
+	stp	x12, x13, [x0, #REGSZ * 4]
+	stp	x14, x15, [x0, #REGSZ * 6]
 	b	size_controlled_print
 endfunc str_in_crash_buf_print
 
@@ -161,7 +136,7 @@ endfunc str_in_crash_buf_print
 	add	x0, x0, #CPU_DATA_CRASH_BUF_OFFSET
 	/* Store crash buffer address in tpidr_el3 */
 	msr	tpidr_el3, x0
-	str	x1, [x0, #REG_SIZE]
+	str	x1, [x0, #REGSZ]
 	mov	x1, sp
 	str	x1, [x0]
 	.endm
@@ -239,9 +214,9 @@ func do_crash_reporting
 	/* Retrieve the crash buf from tpidr_el3 */
 	mrs	x0, tpidr_el3
 	/* Store x2 - x6, x30 in the crash buffer */
-	stp	x2, x3, [x0, #REG_SIZE * 2]
-	stp	x4, x5, [x0, #REG_SIZE * 4]
-	stp	x6, x30, [x0, #REG_SIZE * 6]
+	stp	x2, x3, [x0, #REGSZ * 2]
+	stp	x4, x5, [x0, #REGSZ * 4]
+	stp	x6, x30, [x0, #REGSZ * 6]
 	/* Initialize the crash console */
 	bl	plat_crash_console_init
 	/* Verify the console is initialized */
@@ -252,13 +227,13 @@ func do_crash_reporting
 	/* load the crash buf address */
 	mrs	x0, tpidr_el3
 	/* report x30 first from the crash buf */
-	ldr	x4, [x0, #REG_SIZE * 7]
+	ldr	x4, [x0, #REGSZ * 7]
 	bl	asm_print_hex
 	bl	print_newline
 	/* Load the crash buf address */
 	mrs	x0, tpidr_el3
 	/* Now mov x7 into crash buf */
-	str	x7, [x0, #REG_SIZE * 7]
+	str	x7, [x0, #REGSZ * 7]
 
 	/* Report x0 - x29 values stored in crash buf*/
 	/* Store the ascii list pointer in x6 */
@@ -271,15 +246,15 @@ func do_crash_reporting
 	mrs	x0, tpidr_el3
 	/* Store the rest of gp regs and print */
 	stp	x16, x17, [x0]
-	stp	x18, x19, [x0, #REG_SIZE * 2]
-	stp	x20, x21, [x0, #REG_SIZE * 4]
-	stp	x22, x23, [x0, #REG_SIZE * 6]
+	stp	x18, x19, [x0, #REGSZ * 2]
+	stp	x20, x21, [x0, #REGSZ * 4]
+	stp	x22, x23, [x0, #REGSZ * 6]
 	bl	size_controlled_print
 	/* Load the crash buf address */
 	mrs	x0, tpidr_el3
 	stp	x24, x25, [x0]
-	stp	x26, x27, [x0, #REG_SIZE * 2]
-	stp	x28, x29, [x0, #REG_SIZE * 4]
+	stp	x26, x27, [x0, #REGSZ * 2]
+	stp	x28, x29, [x0, #REGSZ * 4]
 	bl	size_controlled_print
 
 	/* Print the el3 sys registers */
@@ -337,9 +312,8 @@ func do_crash_reporting
 	mrs	x15, cntv_cval_el0
 	bl	str_in_crash_buf_print
 	mrs	x8, cntkctl_el1
-	mrs	x9, fpexc32_el2
-	mrs	x10, sp_el0
-	mrs	x11, isr_el1
+	mrs	x9, sp_el0
+	mrs	x10, isr_el1
 	bl	str_in_crash_buf_print
 
 	/* Get the cpu specific registers to report */
@@ -349,18 +323,20 @@ func do_crash_reporting
 	/* Print some platform registers */
 	plat_crash_print_regs
 
+	bl	plat_crash_console_flush
+
 	/* Done reporting */
-	bl	plat_panic_handler
+	no_ret	plat_panic_handler
 endfunc do_crash_reporting
 
 #else	/* CRASH_REPORTING */
 func report_unhandled_exception
 report_unhandled_interrupt:
-	bl	plat_panic_handler
+	no_ret	plat_panic_handler
 endfunc report_unhandled_exception
 #endif	/* CRASH_REPORTING */
 
 
 func crash_panic
-	bl	plat_panic_handler
+	no_ret	plat_panic_handler
 endfunc crash_panic

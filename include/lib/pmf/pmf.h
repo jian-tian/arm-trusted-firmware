@@ -1,35 +1,11 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PMF_H__
-#define __PMF_H__
+#ifndef PMF_H
+#define PMF_H
 
 #include <cassert.h>
 #include <pmf_helpers.h>
@@ -37,13 +13,13 @@
 /*
  * Constants used for/by PMF services.
  */
-#define PMF_ARM_TIF_IMPL_ID	(0x41000000)
+#define PMF_ARM_TIF_IMPL_ID	0x41
 #define PMF_TID_SHIFT		0
 #define PMF_TID_MASK		(0xFF << PMF_TID_SHIFT)
 #define PMF_SVC_ID_SHIFT	10
 #define PMF_SVC_ID_MASK		(0x3F << PMF_SVC_ID_SHIFT)
 #define PMF_IMPL_ID_SHIFT	24
-#define PMF_IMPL_ID_MASK	(0xFF << PMF_IMPL_ID_SHIFT)
+#define PMF_IMPL_ID_MASK	(0xFFU << PMF_IMPL_ID_SHIFT)
 
 /*
  * Flags passed to PMF_REGISTER_SERVICE
@@ -55,14 +31,14 @@
  * Flags passed to PMF_GET_TIMESTAMP_XXX
  * and PMF_CAPTURE_TIMESTAMP
  */
-#define PMF_CACHE_MAINT		(1 << 0)
-#define PMF_NO_CACHE_MAINT	0
+#define PMF_CACHE_MAINT		(U(1) << 0)
+#define PMF_NO_CACHE_MAINT	U(0)
 
 /*
  * Defines for PMF SMC function ids.
  */
-#define PMF_SMC_GET_TIMESTAMP_32	0x82000010
-#define PMF_SMC_GET_TIMESTAMP_64	0xC2000010
+#define PMF_SMC_GET_TIMESTAMP_32	0x82000010u
+#define PMF_SMC_GET_TIMESTAMP_64	0xC2000010u
 #define PMF_NUM_SMC_CALLS		2
 
 /*
@@ -75,6 +51,7 @@
 
 /* Following are the supported PMF service IDs */
 #define PMF_PSCI_STAT_SVC_ID	0
+#define PMF_RT_INSTR_SVC_ID	1
 
 #if ENABLE_PMF
 /*
@@ -91,7 +68,7 @@
 #define PMF_CAPTURE_TIMESTAMP(_name, _tid, _flags)			\
 	do {								\
 		unsigned long long ts = read_cntpct_el0();		\
-		if ((_flags) & PMF_CACHE_MAINT)				\
+		if (((_flags) & PMF_CACHE_MAINT) != 0U)			\
 			pmf_capture_timestamp_with_cache_maint_ ## _name((_tid), ts);\
 		else							\
 			pmf_capture_timestamp_ ## _name((_tid), ts);	\
@@ -101,7 +78,7 @@
 	do {								\
 		(_tsval) = read_cntpct_el0();				\
 		CASSERT(sizeof(_tsval) == sizeof(unsigned long long), invalid_tsval_size);\
-		if ((_flags) & PMF_CACHE_MAINT)				\
+		if (((_flags) & PMF_CACHE_MAINT) != 0U)			\
 			pmf_capture_timestamp_with_cache_maint_ ## _name((_tid), (_tsval));\
 		else							\
 			pmf_capture_timestamp_ ## _name((_tid), (_tsval));\
@@ -110,7 +87,7 @@
 #define PMF_WRITE_TIMESTAMP(_name, _tid, _flags, _wrval)		\
 	do {								\
 		CASSERT(sizeof(_wrval) == sizeof(unsigned long long), invalid_wrval_size);\
-		if ((_flags) & PMF_CACHE_MAINT)				\
+		if (((_flags) & PMF_CACHE_MAINT) != 0U)			\
 			pmf_capture_timestamp_with_cache_maint_ ## _name((_tid), (_wrval));\
 		else							\
 			pmf_capture_timestamp_ ## _name((_tid), (_wrval));\
@@ -185,7 +162,7 @@
 int pmf_get_timestamp_smc(unsigned int tid,
 		u_register_t mpidr,
 		unsigned int flags,
-		unsigned long long *ts);
+		unsigned long long *ts_value);
 int pmf_setup(void);
 uintptr_t pmf_smc_handler(unsigned int smc_fid,
 		u_register_t x1,
@@ -196,4 +173,4 @@ uintptr_t pmf_smc_handler(unsigned int smc_fid,
 		void *handle,
 		u_register_t flags);
 
-#endif /* __PMF_H__ */
+#endif /* PMF_H */

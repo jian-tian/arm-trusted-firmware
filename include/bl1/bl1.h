@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __BL1_FWU_H__
@@ -63,11 +39,12 @@
 #define FWU_SMC_IMAGE_RESUME		0x13
 #define FWU_SMC_SEC_IMAGE_DONE		0x14
 #define FWU_SMC_UPDATE_DONE		0x15
+#define FWU_SMC_IMAGE_RESET		0x16
 
 /*
  * Number of FWU calls (above) implemented
  */
-#define FWU_NUM_SMC_CALLS		6
+#define FWU_NUM_SMC_CALLS		7
 
 #if TRUSTED_BOARD_BOOT
 # define BL1_NUM_SMC_CALLS		(FWU_NUM_SMC_CALLS + 4)
@@ -80,12 +57,33 @@
  * calls from the SMC function ID
  */
 #define FWU_SMC_FID_START		FWU_SMC_IMAGE_COPY
-#define FWU_SMC_FID_END			FWU_SMC_UPDATE_DONE
+#define FWU_SMC_FID_END			FWU_SMC_IMAGE_RESET
 #define is_fwu_fid(_fid) \
     ((_fid >= FWU_SMC_FID_START) && (_fid <= FWU_SMC_FID_END))
 
 #ifndef __ASSEMBLY__
 #include <cassert.h>
+
+struct entry_point_info;
+
+register_t bl1_smc_wrapper(uint32_t smc_fid,
+	void *cookie,
+	void *handle,
+	unsigned int flags);
+
+register_t bl1_smc_handler(unsigned int smc_fid,
+	register_t x1,
+	register_t x2,
+	register_t x3,
+	register_t x4,
+	void *cookie,
+	void *handle,
+	unsigned int flags);
+
+void bl1_print_next_bl_ep_info(const struct entry_point_info *bl_ep_info);
+
+void bl1_main(void);
+void bl1_plat_prepare_exit(entry_point_info_t *ep_info);
 
 /*
  * Check if the total number of FWU SMC calls are as expected.
@@ -93,6 +91,10 @@
 CASSERT(FWU_NUM_SMC_CALLS == 	\
 		(FWU_SMC_FID_END - FWU_SMC_FID_START + 1),\
 		assert_FWU_NUM_SMC_CALLS_mismatch);
+
+/* Utility functions */
+void bl1_calc_bl2_mem_layout(const meminfo_t *bl1_mem_layout,
+			meminfo_t *bl2_mem_layout);
 
 #endif /* __ASSEMBLY__ */
 #endif /* __BL1_FWU_H__ */

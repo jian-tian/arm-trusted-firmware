@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
@@ -34,37 +10,30 @@
 #include <auth_mod.h>
 #include <bl1.h>
 #include <bl_common.h>
+#include <console.h>
 #include <debug.h>
+#include <errata_report.h>
 #include <platform.h>
 #include <platform_def.h>
-#include <smcc_helpers.h>
+#include <smccc_helpers.h>
 #include <utils.h>
-#include "bl1_private.h"
 #include <uuid.h>
+#include "bl1_private.h"
 
 /* BL1 Service UUID */
-DEFINE_SVC_UUID(bl1_svc_uid,
-	0xfd3967d4, 0x72cb, 0x4d9a, 0xb5, 0x75,
+DEFINE_SVC_UUID2(bl1_svc_uid,
+	0xd46739fd, 0xcb72, 0x9a4d, 0xb5, 0x75,
 	0x67, 0x15, 0xd6, 0xf4, 0xbb, 0x4a);
-
 
 static void bl1_load_bl2(void);
 
 /*******************************************************************************
- * The next function has a weak definition. Platform specific code can override
- * it if it wishes to.
+ * Helper utility to calculate the BL2 memory layout taking into consideration
+ * the BL1 RW data assuming that it is at the top of the memory layout.
  ******************************************************************************/
-#pragma weak bl1_init_bl2_mem_layout
-
-/*******************************************************************************
- * Function that takes a memory layout into which BL2 has been loaded and
- * populates a new memory layout for BL2 that ensures that BL1's data sections
- * resident in secure RAM are not visible to BL2.
- ******************************************************************************/
-void bl1_init_bl2_mem_layout(const meminfo_t *bl1_mem_layout,
-			     meminfo_t *bl2_mem_layout)
+void bl1_calc_bl2_mem_layout(const meminfo_t *bl1_mem_layout,
+			meminfo_t *bl2_mem_layout)
 {
-
 	assert(bl1_mem_layout != NULL);
 	assert(bl2_mem_layout != NULL);
 
@@ -93,6 +62,25 @@ void bl1_init_bl2_mem_layout(const meminfo_t *bl1_mem_layout,
 	flush_dcache_range((unsigned long)bl2_mem_layout, sizeof(meminfo_t));
 }
 
+#if !ERROR_DEPRECATED
+/*******************************************************************************
+ * Compatibility default implementation for deprecated API. This has a weak
+ * definition. Platform specific code can override it if it wishes to.
+ ******************************************************************************/
+#pragma weak bl1_init_bl2_mem_layout
+
+/*******************************************************************************
+ * Function that takes a memory layout into which BL2 has been loaded and
+ * populates a new memory layout for BL2 that ensures that BL1's data sections
+ * resident in secure RAM are not visible to BL2.
+ ******************************************************************************/
+void bl1_init_bl2_mem_layout(const struct meminfo *bl1_mem_layout,
+			     struct meminfo *bl2_mem_layout)
+{
+	bl1_calc_bl2_mem_layout(bl1_mem_layout, bl2_mem_layout);
+}
+#endif
+
 /*******************************************************************************
  * Function to perform late architectural and platform specific initialization.
  * It also queries the platform to load and run next BL image. Only called
@@ -110,8 +98,9 @@ void bl1_main(void)
 	INFO("BL1: RAM %p - %p\n", (void *)BL1_RAM_BASE,
 					(void *)BL1_RAM_LIMIT);
 
+	print_errata_status();
 
-#if DEBUG
+#if ENABLE_ASSERTIONS
 	u_register_t val;
 	/*
 	 * Ensure that MMU/Caches and coherency are turned on
@@ -138,7 +127,7 @@ void bl1_main(void)
 		assert(CACHE_WRITEBACK_GRANULE == SIZE_FROM_LOG2_WORDS(val));
 	else
 		assert(CACHE_WRITEBACK_GRANULE <= MAX_CACHE_LINE_SIZE);
-#endif
+#endif /* ENABLE_ASSERTIONS */
 
 	/* Perform remaining generic architectural setup from EL3 */
 	bl1_arch_setup();
@@ -164,6 +153,8 @@ void bl1_main(void)
 		NOTICE("BL1-FWU: *******FWU Process Started*******\n");
 
 	bl1_prepare_next_image(image_id);
+
+	console_flush();
 }
 
 /*******************************************************************************
@@ -172,13 +163,10 @@ void bl1_main(void)
  * TODO: Add support for alternative image load mechanism e.g using virtio/elf
  * loader etc.
  ******************************************************************************/
-void bl1_load_bl2(void)
+static void bl1_load_bl2(void)
 {
 	image_desc_t *image_desc;
 	image_info_t *image_info;
-	entry_point_info_t *ep_info;
-	meminfo_t *bl1_tzram_layout;
-	meminfo_t *bl2_tzram_layout;
 	int err;
 
 	/* Get the image descriptor */
@@ -187,6 +175,19 @@ void bl1_load_bl2(void)
 
 	/* Get the image info */
 	image_info = &image_desc->image_info;
+	INFO("BL1: Loading BL2\n");
+
+	err = bl1_plat_handle_pre_image_load(BL2_IMAGE_ID);
+	if (err) {
+		ERROR("Failure in pre image load handling of BL2 (%d)\n", err);
+		plat_error_handler(err);
+	}
+
+#if LOAD_IMAGE_V2
+	err = load_auth_image(BL2_IMAGE_ID, image_info);
+#else
+	entry_point_info_t *ep_info;
+	meminfo_t *bl1_tzram_layout;
 
 	/* Get the entry point info */
 	ep_info = &image_desc->ep_info;
@@ -194,11 +195,6 @@ void bl1_load_bl2(void)
 	/* Find out how much free trusted ram remains after BL1 load */
 	bl1_tzram_layout = bl1_plat_sec_mem_layout();
 
-	INFO("BL1: Loading BL2\n");
-
-#if LOAD_IMAGE_V2
-	err = load_auth_image(BL2_IMAGE_ID, image_info);
-#else
 	/* Load the BL2 image */
 	err = load_auth_image(bl1_tzram_layout,
 			 BL2_IMAGE_ID,
@@ -213,25 +209,14 @@ void bl1_load_bl2(void)
 		plat_error_handler(err);
 	}
 
-	/*
-	 * Create a new layout of memory for BL2 as seen by BL1 i.e.
-	 * tell it the amount of total and free memory available.
-	 * This layout is created at the first free address visible
-	 * to BL2. BL2 will read the memory layout before using its
-	 * memory for other purposes.
-	 */
-#if LOAD_IMAGE_V2
-	bl2_tzram_layout = (meminfo_t *) bl1_tzram_layout->total_base;
-#else
-	bl2_tzram_layout = (meminfo_t *) bl1_tzram_layout->free_base;
-#endif /* LOAD_IMAGE_V2 */
+	/* Allow platform to handle image information. */
+	err = bl1_plat_handle_post_image_load(BL2_IMAGE_ID);
+	if (err) {
+		ERROR("Failure in post image load handling of BL2 (%d)\n", err);
+		plat_error_handler(err);
+	}
 
-	bl1_init_bl2_mem_layout(bl1_tzram_layout, bl2_tzram_layout);
-
-	ep_info->args.arg1 = (uintptr_t)bl2_tzram_layout;
 	NOTICE("BL1: Booting BL2\n");
-	VERBOSE("BL1: BL2 memory layout address = %p\n",
-		(void *) bl2_tzram_layout);
 }
 
 /*******************************************************************************
@@ -297,4 +282,21 @@ register_t bl1_smc_handler(unsigned int smc_fid,
 
 	WARN("Unimplemented BL1 SMC Call: 0x%x \n", smc_fid);
 	SMC_RET1(handle, SMC_UNK);
+}
+
+/*******************************************************************************
+ * BL1 SMC wrapper.  This function is only used in AArch32 mode to ensure ABI
+ * compliance when invoking bl1_smc_handler.
+ ******************************************************************************/
+register_t bl1_smc_wrapper(uint32_t smc_fid,
+	void *cookie,
+	void *handle,
+	unsigned int flags)
+{
+	register_t x1, x2, x3, x4;
+
+	assert(handle);
+
+	get_smc_params_from_ctx(handle, x1, x2, x3, x4);
+	return bl1_smc_handler(smc_fid, x1, x2, x3, x4, cookie, handle, flags);
 }

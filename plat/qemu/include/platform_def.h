@@ -1,49 +1,33 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLATFORM_DEF_H__
-#define __PLATFORM_DEF_H__
+#ifndef PLATFORM_DEF_H
+#define PLATFORM_DEF_H
 
 #include <arch.h>
 #include <common_def.h>
 #include <tbbr_img_def.h>
+#include <utils_def.h>
 
 /* Special value used to verify platform parameters from BL2 to BL3-1 */
 #define QEMU_BL31_PLAT_PARAM_VAL	0x0f1e2d3c4b5a6978ULL
 
 #define PLATFORM_STACK_SIZE 0x1000
 
+#if ARM_ARCH_MAJOR == 7
+#define PLATFORM_MAX_CPUS_PER_CLUSTER	4
+#define PLATFORM_CLUSTER_COUNT		1
+#define PLATFORM_CLUSTER0_CORE_COUNT	PLATFORM_MAX_CPUS_PER_CLUSTER
+#define PLATFORM_CLUSTER1_CORE_COUNT	0
+#else
 #define PLATFORM_MAX_CPUS_PER_CLUSTER	4
 #define PLATFORM_CLUSTER_COUNT		2
 #define PLATFORM_CLUSTER0_CORE_COUNT	PLATFORM_MAX_CPUS_PER_CLUSTER
 #define PLATFORM_CLUSTER1_CORE_COUNT	PLATFORM_MAX_CPUS_PER_CLUSTER
+#endif
 #define PLATFORM_CORE_COUNT		(PLATFORM_CLUSTER0_CORE_COUNT + \
 					 PLATFORM_CLUSTER1_CORE_COUNT)
 
@@ -53,13 +37,13 @@
 					PLATFORM_CORE_COUNT)
 #define PLAT_MAX_PWR_LVL		MPIDR_AFFLVL1
 
-#define PLAT_MAX_RET_STATE		1
-#define PLAT_MAX_OFF_STATE		2
+#define PLAT_MAX_RET_STATE		U(1)
+#define PLAT_MAX_OFF_STATE		U(2)
 
 /* Local power state for power domains in Run state. */
-#define PLAT_LOCAL_STATE_RUN		0
+#define PLAT_LOCAL_STATE_RUN		U(0)
 /* Local power state for retention. Valid only for CPU power domains */
-#define PLAT_LOCAL_STATE_RET		1
+#define PLAT_LOCAL_STATE_RET		U(1)
 /*
  * Local power state for OFF/power-down. Valid for CPU and cluster power
  * domains.
@@ -92,10 +76,14 @@
 #define NS_DRAM0_SIZE			0x3de00000
 
 #define SEC_SRAM_BASE			0x0e000000
-#define SEC_SRAM_SIZE			0x00040000
+#define SEC_SRAM_SIZE			0x00060000
 
 #define SEC_DRAM_BASE			0x0e100000
 #define SEC_DRAM_SIZE			0x00f00000
+
+/* Load pageable part of OP-TEE 2MB above secure DRAM base */
+#define QEMU_OPTEE_PAGEABLE_LOAD_BASE	(SEC_DRAM_BASE + 0x00200000)
+#define QEMU_OPTEE_PAGEABLE_LOAD_SIZE	0x00400000
 
 /*
  * ARM-TF lives in SRAM, partition it here
@@ -109,7 +97,8 @@
 #define PLAT_QEMU_HOLD_BASE		(PLAT_QEMU_TRUSTED_MAILBOX_BASE + 8)
 #define PLAT_QEMU_HOLD_SIZE		(PLATFORM_CORE_COUNT * \
 					 PLAT_QEMU_HOLD_ENTRY_SIZE)
-#define PLAT_QEMU_HOLD_ENTRY_SIZE	8
+#define PLAT_QEMU_HOLD_ENTRY_SHIFT	3
+#define PLAT_QEMU_HOLD_ENTRY_SIZE	(1 << PLAT_QEMU_HOLD_ENTRY_SHIFT)
 #define PLAT_QEMU_HOLD_STATE_WAIT	0
 #define PLAT_QEMU_HOLD_STATE_GO		1
 
@@ -135,7 +124,7 @@
  * Put BL2 just below BL3-1. BL2_BASE is calculated using the current BL2 debug
  * size plus a little space for growth.
  */
-#define BL2_BASE			(BL31_BASE - 0x1D000)
+#define BL2_BASE			(BL31_BASE - 0x25000)
 #define BL2_LIMIT			BL31_BASE
 
 /*
@@ -175,12 +164,12 @@
 #else
 # error "Unsupported BL32_RAM_LOCATION_ID value"
 #endif
-#define BL32_SIZE			(BL32_LIMIT - BL32_BASE)
 
 #define NS_IMAGE_OFFSET			0x60000000
 
-#define ADDR_SPACE_SIZE			(1ull << 32)
-#define MAX_MMAP_REGIONS		8
+#define PLAT_PHY_ADDR_SPACE_SIZE	(1ULL << 32)
+#define PLAT_VIRT_ADDR_SPACE_SIZE	(1ULL << 32)
+#define MAX_MMAP_REGIONS		10
 #define MAX_XLAT_TABLES			6
 #define MAX_IO_DEVICES			3
 #define MAX_IO_HANDLES			4
@@ -210,7 +199,7 @@
 #define DEVICE0_BASE			0x08000000
 #define DEVICE0_SIZE			0x00021000
 #define DEVICE1_BASE			0x09000000
-#define DEVICE1_SIZE			0x00011000
+#define DEVICE1_SIZE			0x00041000
 
 /*
  * GIC related constants
@@ -241,4 +230,4 @@
  */
 #define SYS_COUNTER_FREQ_IN_TICKS	((1000 * 1000 * 1000) / 16)
 
-#endif /* __PLATFORM_DEF_H__ */
+#endif /* PLATFORM_DEF_H */

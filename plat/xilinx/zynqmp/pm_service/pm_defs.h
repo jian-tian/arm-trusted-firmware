@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 /* ZynqMP power management enums and defines */
@@ -41,8 +17,8 @@
  * Version number is a 32bit value, like:
  * (PM_VERSION_MAJOR << 16) | PM_VERSION_MINOR
  */
-#define PM_VERSION_MAJOR	0
-#define PM_VERSION_MINOR	2
+#define PM_VERSION_MAJOR	1
+#define PM_VERSION_MINOR	0
 
 #define PM_VERSION	((PM_VERSION_MAJOR << 16) | PM_VERSION_MINOR)
 
@@ -86,10 +62,33 @@ enum pm_api_id {
 	PM_RESET_GET_STATUS,
 	PM_MMIO_WRITE,
 	PM_MMIO_READ,
-	PM_INIT,
+	PM_INIT_FINALIZE,
 	PM_FPGA_LOAD,
 	PM_FPGA_GET_STATUS,
 	PM_GET_CHIPID,
+	PM_SECURE_RSA_AES,
+	PM_SECURE_SHA,
+	PM_SECURE_RSA,
+	PM_PINCTRL_REQUEST,
+	PM_PINCTRL_RELEASE,
+	PM_PINCTRL_GET_FUNCTION,
+	PM_PINCTRL_SET_FUNCTION,
+	PM_PINCTRL_CONFIG_PARAM_GET,
+	PM_PINCTRL_CONFIG_PARAM_SET,
+	PM_IOCTL,
+	/* API to query information from firmware */
+	PM_QUERY_DATA,
+	/* Clock control API functions */
+	PM_CLOCK_ENABLE,
+	PM_CLOCK_DISABLE,
+	PM_CLOCK_GETSTATE,
+	PM_CLOCK_SETDIVIDER,
+	PM_CLOCK_GETDIVIDER,
+	PM_CLOCK_SETRATE,
+	PM_CLOCK_GETRATE,
+	PM_CLOCK_SETPARENT,
+	PM_CLOCK_GETPARENT,
+	PM_SECURE_IMAGE,
 	PM_API_MAX
 };
 
@@ -103,7 +102,7 @@ enum pm_node_id {
 	NODE_RPU,
 	NODE_RPU_0,
 	NODE_RPU_1,
-	NODE_PL,
+	NODE_PLD,
 	NODE_FPD,
 	NODE_OCM_BANK_0,
 	NODE_OCM_BANK_1,
@@ -143,7 +142,7 @@ enum pm_node_id {
 	NODE_GPIO,
 	NODE_CAN_0,
 	NODE_CAN_1,
-	NODE_AFI,
+	NODE_EXTERN,
 	NODE_APLL,
 	NODE_VPLL,
 	NODE_DPLL,
@@ -156,7 +155,23 @@ enum pm_node_id {
 	NODE_PCIE,
 	NODE_PCAP,
 	NODE_RTC,
-	NODE_MAX
+	NODE_LPD,
+	NODE_VCU,
+	NODE_IPI_RPU_1,
+	NODE_IPI_PL_0,
+	NODE_IPI_PL_1,
+	NODE_IPI_PL_2,
+	NODE_IPI_PL_3,
+	NODE_PL,
+	NODE_GEM_TSU,
+	NODE_SWDT_0,
+	NODE_SWDT_1,
+	NODE_CSU,
+	NODE_PJTAG,
+	NODE_TRACE,
+	NODE_TESTSCAN,
+	NODE_PMU,
+	NODE_MAX,
 };
 
 enum pm_request_ack {
@@ -223,6 +238,28 @@ enum pm_boot_status {
 	PM_INITIAL_BOOT,
 	PM_RESUME,
 	PM_BOOT_ERROR,
+};
+
+/**
+ * @PMF_SHUTDOWN_TYPE_SHUTDOWN:		shutdown
+ * @PMF_SHUTDOWN_TYPE_RESET:		reset/reboot
+ * @PMF_SHUTDOWN_TYPE_SETSCOPE_ONLY:	set the shutdown/reboot scope
+ */
+enum pm_shutdown_type {
+	PMF_SHUTDOWN_TYPE_SHUTDOWN,
+	PMF_SHUTDOWN_TYPE_RESET,
+	PMF_SHUTDOWN_TYPE_SETSCOPE_ONLY,
+};
+
+/**
+ * @PMF_SHUTDOWN_SUBTYPE_SUBSYSTEM:	shutdown/reboot APU subsystem only
+ * @PMF_SHUTDOWN_SUBTYPE_PS_ONLY:	shutdown/reboot entire PS (but not PL)
+ * @PMF_SHUTDOWN_SUBTYPE_SYSTEM:	shutdown/reboot entire system
+ */
+enum pm_shutdown_subtype {
+	PMF_SHUTDOWN_SUBTYPE_SUBSYSTEM,
+	PMF_SHUTDOWN_SUBTYPE_PS_ONLY,
+	PMF_SHUTDOWN_SUBTYPE_SYSTEM,
 };
 
 #endif /* _PM_DEFS_H_ */

@@ -1,44 +1,21 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <stdio.h>
 #include <openssl/sha.h>
-
+#include <stdio.h>
 #include "debug.h"
+#include "key.h"
 
 #define BUFFER_SIZE	256
 
-int sha_file(const char *filename, unsigned char *md)
+int sha_file(int md_alg, const char *filename, unsigned char *md)
 {
 	FILE *inFile;
 	SHA256_CTX shaContext;
+	SHA512_CTX sha512Context;
 	int bytes;
 	unsigned char data[BUFFER_SIZE];
 
@@ -53,11 +30,25 @@ int sha_file(const char *filename, unsigned char *md)
 		return 0;
 	}
 
-	SHA256_Init(&shaContext);
-	while ((bytes = fread(data, 1, BUFFER_SIZE, inFile)) != 0) {
-		SHA256_Update(&shaContext, data, bytes);
+	if (md_alg == HASH_ALG_SHA384) {
+		SHA384_Init(&sha512Context);
+		while ((bytes = fread(data, 1, BUFFER_SIZE, inFile)) != 0) {
+			SHA384_Update(&sha512Context, data, bytes);
+		}
+		SHA384_Final(md, &sha512Context);
+	} else if (md_alg == HASH_ALG_SHA512) {
+		SHA512_Init(&sha512Context);
+		while ((bytes = fread(data, 1, BUFFER_SIZE, inFile)) != 0) {
+			SHA512_Update(&sha512Context, data, bytes);
+		}
+		SHA512_Final(md, &sha512Context);
+	} else {
+		SHA256_Init(&shaContext);
+		while ((bytes = fread(data, 1, BUFFER_SIZE, inFile)) != 0) {
+			SHA256_Update(&shaContext, data, bytes);
+		}
+		SHA256_Final(md, &shaContext);
 	}
-	SHA256_Final(md, &shaContext);
 
 	fclose(inFile);
 	return 1;

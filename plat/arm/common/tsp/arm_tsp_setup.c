@@ -1,72 +1,58 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arm_def.h>
+#include <assert.h>
 #include <bl_common.h>
 #include <console.h>
+#include <debug.h>
+#include <pl011.h>
+#include <plat_arm.h>
 #include <platform_def.h>
 #include <platform_tsp.h>
-#include <plat_arm.h>
 
 #define BL32_END (unsigned long)(&__BL32_END__)
-
-#if USE_COHERENT_MEM
-/*
- * The next 2 constants identify the extents of the coherent memory region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __COHERENT_RAM_START__ and __COHERENT_RAM_END__ linker symbols refer to
- * page-aligned addresses.
- */
-#define BL32_COHERENT_RAM_BASE (unsigned long)(&__COHERENT_RAM_START__)
-#define BL32_COHERENT_RAM_LIMIT (unsigned long)(&__COHERENT_RAM_END__)
-#endif
-
 
 /* Weak definitions may be overridden in specific ARM standard platform */
 #pragma weak tsp_early_platform_setup
 #pragma weak tsp_platform_setup
 #pragma weak tsp_plat_arch_setup
 
+#define MAP_BL_TSP_TOTAL	MAP_REGION_FLAT(			\
+					BL32_BASE,			\
+					BL32_END - BL32_BASE,		\
+					MT_MEMORY | MT_RW | MT_SECURE)
 
 /*******************************************************************************
  * Initialize the UART
  ******************************************************************************/
+#if MULTI_CONSOLE_API
+static console_pl011_t arm_tsp_runtime_console;
+#endif
+
 void arm_tsp_early_platform_setup(void)
 {
+#if MULTI_CONSOLE_API
 	/*
 	 * Initialize a different console than already in use to display
 	 * messages from TSP
 	 */
+	int rc = console_pl011_register(PLAT_ARM_TSP_UART_BASE,
+					PLAT_ARM_TSP_UART_CLK_IN_HZ,
+					ARM_CONSOLE_BAUDRATE,
+					&arm_tsp_runtime_console);
+	if (rc == 0)
+		panic();
+
+	console_set_scope(&arm_tsp_runtime_console.console,
+			  CONSOLE_FLAG_BOOT | CONSOLE_FLAG_RUNTIME);
+#else
 	console_init(PLAT_ARM_TSP_UART_BASE, PLAT_ARM_TSP_UART_CLK_IN_HZ,
 			ARM_CONSOLE_BAUDRATE);
+#endif /* MULTI_CONSOLE_API */
 }
 
 void tsp_early_platform_setup(void)
@@ -88,16 +74,18 @@ void tsp_platform_setup(void)
  ******************************************************************************/
 void tsp_plat_arch_setup(void)
 {
-	arm_setup_page_tables(BL32_BASE,
-			      (BL32_END - BL32_BASE),
-			      BL_CODE_BASE,
-			      BL_CODE_LIMIT,
-			      BL_RO_DATA_BASE,
-			      BL_RO_DATA_LIMIT
 #if USE_COHERENT_MEM
-			      , BL32_COHERENT_RAM_BASE,
-			      BL32_COHERENT_RAM_LIMIT
+	/* Ensure ARM platforms dont use coherent memory in TSP */
+	assert((BL_COHERENT_RAM_END - BL_COHERENT_RAM_BASE) == 0U);
 #endif
-			      );
+
+	const mmap_region_t bl_regions[] = {
+		MAP_BL_TSP_TOTAL,
+		ARM_MAP_BL_CODE,
+		ARM_MAP_BL_RO_DATA,
+		{0}
+	};
+
+	arm_setup_page_tables(bl_regions, plat_arm_get_mmap());
 	enable_mmu_el1(0);
 }

@@ -1,37 +1,28 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #ifndef __ASM_MACROS_S__
 #define __ASM_MACROS_S__
 
 #include <arch.h>
 #include <asm_macros_common.S>
+#include <spinlock.h>
+
+/*
+ * TLBI instruction with type specifier that implements the workaround for
+ * errata 813419 of Cortex-A57.
+ */
+#if ERRATA_A57_813419
+#define TLB_INVALIDATE(_type) \
+	tlbi	_type; \
+	dsb	ish; \
+	tlbi	_type
+#else
+#define TLB_INVALIDATE(_type) \
+	tlbi	_type
+#endif
 
 
 	.macro	func_prologue
@@ -74,8 +65,8 @@
 	 * so that it inserts illegal AArch64 instructions. This increases
 	 * security, robustness and potentially facilitates debugging.
 	 */
-	.macro vector_base  label
-	.section .vectors, "ax"
+	.macro vector_base  label, section_name=.vectors
+	.section \section_name, "ax"
 	.align 11, 0
 	\label:
 	.endm
@@ -87,10 +78,23 @@
 	 * so that it inserts illegal AArch64 instructions. This increases
 	 * security, robustness and potentially facilitates debugging.
 	 */
-	.macro vector_entry  label
-	.section .vectors, "ax"
+	.macro vector_entry  label, section_name=.vectors
+	.cfi_sections .debug_frame
+	.section \section_name, "ax"
 	.align 7, 0
+	.type \label, %function
+	.cfi_startproc
 	\label:
+	.endm
+
+	/*
+	 * Add the bytes until fill the full exception vector, whose size is always
+	 * 32 instructions. If there are more than 32 instructions in the
+	 * exception vector then an error is emitted.
+	 */
+	.macro end_vector_entry label
+	.cfi_endproc
+	.fill	\label + (32 * 4) - .
 	.endm
 
 	/*
@@ -100,9 +104,10 @@
 	 * vector entry as the parameter
 	 */
 	.macro check_vector_size since
-	  .if (. - \since) > (32 * 4)
-	    .error "Vector exceeds 32 instructions"
-	  .endif
+#if ERROR_DEPRECATED
+      .error "check_vector_size must not be used. Use end_vector_entry instead"
+#endif
+	end_vector_entry \since
 	.endm
 
 #if ENABLE_PLAT_COMPAT
@@ -177,5 +182,42 @@
 			_mov_imm16	\_reg, (\_val), 48
 		.endif
 	.endm
+
+	/*
+	 * Macro to mark instances where we're jumping to a function and don't
+	 * expect a return. To provide the function being jumped to with
+	 * additional information, we use 'bl' instruction to jump rather than
+	 * 'b'.
+         *
+	 * Debuggers infer the location of a call from where LR points to, which
+	 * is usually the instruction after 'bl'. If this macro expansion
+	 * happens to be the last location in a function, that'll cause the LR
+	 * to point a location beyond the function, thereby misleading debugger
+	 * back trace. We therefore insert a 'nop' after the function call for
+	 * debug builds, unless 'skip_nop' parameter is non-zero.
+	 */
+	.macro no_ret _func:req, skip_nop=0
+	bl	\_func
+#if DEBUG
+	.ifeq \skip_nop
+	nop
+	.endif
+#endif
+	.endm
+
+	/*
+	 * Reserve space for a spin lock in assembly file.
+	 */
+	.macro define_asm_spinlock _name:req
+	.align	SPINLOCK_ASM_ALIGN
+	\_name:
+	.space	SPINLOCK_ASM_SIZE
+	.endm
+
+#if RAS_EXTENSION
+	.macro esb
+	.inst	0xd503221f
+	.endm
+#endif
 
 #endif /* __ASM_MACROS_S__ */

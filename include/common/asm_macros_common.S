@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #ifndef __ASM_MACROS_COMMON_S__
 #define __ASM_MACROS_COMMON_S__
@@ -33,12 +9,34 @@
 	/*
 	 * This macro is used to create a function label and place the
 	 * code into a separate text section based on the function name
-	 * to enable elimination of unused code during linking
+	 * to enable elimination of unused code during linking. It also adds
+	 * basic debug information to enable call stack printing most of the
+	 * time. The optional _align parameter can be used to force a
+	 * non-standard alignment (indicated in powers of 2). The default is
+	 * _align=2 because both Aarch32 and Aarch64 instructions must be
+	 * word aligned. Do *not* try to use a raw .align directive. Since func
+	 * switches to a new section, this would not have the desired effect.
 	 */
-	.macro func _name
-	.section .text.\_name, "ax"
+	.macro func _name, _align=2
+	/*
+	 * Add Call Frame Information entry in the .debug_frame section for
+	 * debugger consumption. This enables callstack printing in debuggers.
+	 * This does not use any space in the final loaded binary, only in the
+	 * ELF file.
+	 * Note that a function manipulating the CFA pointer location (i.e. the
+	 * x29 frame pointer on AArch64) should declare it using the
+	 * appropriate .cfi* directives, or be prepared to have a degraded
+	 * debugging experience.
+	 */
+	.cfi_sections .debug_frame
+	.section .text.asm.\_name, "ax"
 	.type \_name, %function
-	.func \_name
+	/*
+	 * .cfi_startproc and .cfi_endproc are needed to output entries in
+	 * .debug_frame
+	 */
+	.cfi_startproc
+	.align \_align
 	\_name:
 	.endm
 
@@ -46,7 +44,7 @@
 	 * This macro is used to mark the end of a function.
 	 */
 	.macro endfunc _name
-	.endfunc
+	.cfi_endproc
 	.size \_name, . - \_name
 	.endm
 

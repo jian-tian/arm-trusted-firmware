@@ -1,31 +1,7 @@
 #
-# Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+# Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# Neither the name of ARM nor the names of its contributors may be used
-# to endorse or promote products derived from this software without specific
-# prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
+# SPDX-License-Identifier: BSD-3-Clause
 #
 
 ifneq (${ARCH}, aarch32)
@@ -39,11 +15,22 @@ INCLUDES		+=	-Iinclude/bl32/sp_min
 BL32_SOURCES		+=	bl32/sp_min/sp_min_main.c		\
 				bl32/sp_min/aarch32/entrypoint.S	\
 				common/runtime_svc.c			\
+				plat/common/aarch32/plat_sp_min_common.c\
 				services/std_svc/std_svc_setup.c	\
 				${PSCI_LIB_SOURCES}
 
 ifeq (${ENABLE_PMF}, 1)
 BL32_SOURCES		+=	lib/pmf/pmf_main.c
+endif
+
+ifeq (${ENABLE_AMU}, 1)
+BL32_SOURCES		+=	lib/extensions/amu/aarch32/amu.c\
+				lib/extensions/amu/aarch32/amu_helpers.S
+endif
+
+ifeq (${WORKAROUND_CVE_2017_5715},1)
+BL32_SOURCES		+=	bl32/sp_min/wa_cve_2017_5715_bpiall.S	\
+				bl32/sp_min/wa_cve_2017_5715_icache_inv.S
 endif
 
 BL32_LINKERFILE	:=	bl32/sp_min/sp_min.ld.S
@@ -61,3 +48,9 @@ endif
 RESET_TO_SP_MIN	:= 0
 $(eval $(call add_define,RESET_TO_SP_MIN))
 $(eval $(call assert_boolean,RESET_TO_SP_MIN))
+
+# Flag to allow SP_MIN to handle FIQ interrupts in monitor mode. The platform
+# port is free to override this value. It is default disabled.
+SP_MIN_WITH_SECURE_FIQ 	?= 0
+$(eval $(call add_define,SP_MIN_WITH_SECURE_FIQ))
+$(eval $(call assert_boolean,SP_MIN_WITH_SECURE_FIQ))

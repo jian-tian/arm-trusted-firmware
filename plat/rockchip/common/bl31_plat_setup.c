@@ -1,53 +1,21 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arm_gic.h>
 #include <assert.h>
 #include <bl_common.h>
 #include <console.h>
+#include <coreboot.h>
 #include <debug.h>
 #include <generic_delay_timer.h>
 #include <mmio.h>
-#include <platform.h>
 #include <plat_private.h>
+#include <platform.h>
 #include <platform_def.h>
-
-/*******************************************************************************
- * Declarations of linker defined symbols which will help us find the layout
- * of trusted SRAM
- ******************************************************************************/
-unsigned long __RO_START__;
-unsigned long __RO_END__;
-
-unsigned long __COHERENT_RAM_START__;
-unsigned long __COHERENT_RAM_END__;
+#include <uart_16550.h>
 
 /*
  * The next 2 constants identify the extents of the code & RO data region.
@@ -55,18 +23,8 @@ unsigned long __COHERENT_RAM_END__;
  * page-aligned.  It is the responsibility of the linker script to ensure that
  * __RO_START__ and __RO_END__ linker symbols refer to page-aligned addresses.
  */
-#define BL31_RO_BASE (unsigned long)(&__RO_START__)
-#define BL31_RO_LIMIT (unsigned long)(&__RO_END__)
-
-/*
- * The next 2 constants identify the extents of the coherent memory region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __COHERENT_RAM_START__ and __COHERENT_RAM_END__ linker symbols
- * refer to page-aligned addresses.
- */
-#define BL31_COHERENT_RAM_BASE (unsigned long)(&__COHERENT_RAM_START__)
-#define BL31_COHERENT_RAM_LIMIT (unsigned long)(&__COHERENT_RAM_END__)
+IMPORT_SYM(unsigned long, __RO_START__,	BL31_RO_BASE);
+IMPORT_SYM(unsigned long, __RO_END__,	BL31_RO_LIMIT);
 
 static entry_point_info_t bl32_ep_info;
 static entry_point_info_t bl33_ep_info;
@@ -90,6 +48,11 @@ entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
 		return NULL;
 }
 
+#pragma weak params_early_setup
+void params_early_setup(void *plat_param_from_bl2)
+{
+}
+
 /*******************************************************************************
  * Perform any BL3-1 early platform setup. Here is an opportunity to copy
  * parameters passed by the calling EL (S-EL1 in BL2 & S-EL3 in BL1) before they
@@ -101,8 +64,20 @@ entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
 void bl31_early_platform_setup(bl31_params_t *from_bl2,
 			       void *plat_params_from_bl2)
 {
-	console_init(PLAT_RK_UART_BASE, PLAT_RK_UART_CLOCK,
-		     PLAT_RK_UART_BAUDRATE);
+	static console_16550_t console;
+
+	params_early_setup(plat_params_from_bl2);
+
+#if COREBOOT
+	if (coreboot_serial.type)
+		console_16550_register(coreboot_serial.baseaddr,
+				       coreboot_serial.input_hertz,
+				       coreboot_serial.baud,
+				       &console);
+#else
+	console_16550_register(PLAT_RK_UART_BASE, PLAT_RK_UART_CLOCK,
+			       PLAT_RK_UART_BAUDRATE, &console);
+#endif
 
 	VERBOSE("bl31_setup\n");
 
@@ -114,15 +89,6 @@ void bl31_early_platform_setup(bl31_params_t *from_bl2,
 
 	bl32_ep_info = *from_bl2->bl32_ep_info;
 	bl33_ep_info = *from_bl2->bl33_ep_info;
-
-	/*
-	 * The code for resuming cpu from suspend must be excuted in pmusram.
-	 * Copy the code into pmusram.
-	 */
-	plat_rockchip_pmusram_prepare();
-
-	/* there may have some board sepcific message need to initialize */
-	params_early_setup(plat_params_from_bl2);
 }
 
 /*******************************************************************************
@@ -148,9 +114,9 @@ void bl31_plat_arch_setup(void)
 	plat_cci_init();
 	plat_cci_enable();
 	plat_configure_mmu_el3(BL31_RO_BASE,
-			       (BL31_COHERENT_RAM_LIMIT - BL31_RO_BASE),
+			       BL_COHERENT_RAM_END - BL31_RO_BASE,
 			       BL31_RO_BASE,
 			       BL31_RO_LIMIT,
-			       BL31_COHERENT_RAM_BASE,
-			       BL31_COHERENT_RAM_LIMIT);
+			       BL_COHERENT_RAM_BASE,
+			       BL_COHERENT_RAM_END);
 }

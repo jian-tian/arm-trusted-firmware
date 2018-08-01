@@ -1,45 +1,28 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
 #include <asm_macros.S>
+#include <console.h>
 #include <platform_def.h>
 
 	.weak	plat_report_exception
 	.weak	plat_crash_console_init
 	.weak	plat_crash_console_putc
+	.weak	plat_crash_console_flush
 	.weak	plat_reset_handler
 	.weak	plat_disable_acp
 	.weak	bl1_plat_prepare_exit
-	.weak	plat_error_handler
 	.weak	plat_panic_handler
+	.weak	bl31_plat_enable_mmu
+	.weak	bl32_plat_enable_mmu
+
+	.weak	plat_handle_uncontainable_ea
+	.weak	plat_handle_double_fault
+	.weak	plat_handle_el3_ea
 
 #if !ENABLE_PLAT_COMPAT
 	.globl	platform_get_core_pos
@@ -77,9 +60,63 @@ func plat_report_exception
 	ret
 endfunc plat_report_exception
 
+#if MULTI_CONSOLE_API
 	/* -----------------------------------------------------
-	 * Placeholder function which should be redefined by
-	 * each platform.
+	 * int plat_crash_console_init(void)
+	 * Use normal console by default. Switch it to crash
+	 * mode so serial consoles become active again.
+	 * NOTE: This default implementation will only work for
+	 * crashes that occur after a normal console (marked
+	 * valid for the crash state) has been registered with
+	 * the console framework. To debug crashes that occur
+	 * earlier, the platform has to override these functions
+	 * with an implementation that initializes a console
+	 * driver with hardcoded parameters. See
+	 * docs/porting-guide.rst for more information.
+	 * -----------------------------------------------------
+	 */
+func plat_crash_console_init
+#if defined(IMAGE_BL1)
+	/*
+	 * BL1 code can possibly crash so early that the data segment is not yet
+	 * accessible. Don't risk undefined behavior by trying to run the normal
+	 * console framework. Platforms that want to debug BL1 will need to
+	 * override this with custom functions that can run from registers only.
+	 */
+	mov	x0, #0
+	ret
+#else	/* IMAGE_BL1 */
+	mov	x3, x30
+	mov	x0, #CONSOLE_FLAG_CRASH
+	bl	console_switch_state
+	mov	x0, #1
+	ret	x3
+#endif
+endfunc plat_crash_console_init
+
+	/* -----------------------------------------------------
+	 * void plat_crash_console_putc(int character)
+	 * Output through the normal console by default.
+	 * -----------------------------------------------------
+	 */
+func plat_crash_console_putc
+	b	console_putc
+endfunc plat_crash_console_putc
+
+	/* -----------------------------------------------------
+	 * void plat_crash_console_flush(void)
+	 * Flush normal console by default.
+	 * -----------------------------------------------------
+	 */
+func plat_crash_console_flush
+	b	console_flush
+endfunc plat_crash_console_flush
+
+#else	/* MULTI_CONSOLE_API */
+
+	/* -----------------------------------------------------
+	 * In the old API these are all no-op stubs that need to
+	 * be overridden by the platform to be useful.
 	 * -----------------------------------------------------
 	 */
 func plat_crash_console_init
@@ -87,18 +124,18 @@ func plat_crash_console_init
 	ret
 endfunc plat_crash_console_init
 
-	/* -----------------------------------------------------
-	 * Placeholder function which should be redefined by
-	 * each platform.
-	 * -----------------------------------------------------
-	 */
 func plat_crash_console_putc
 	ret
 endfunc plat_crash_console_putc
 
+func plat_crash_console_flush
+	ret
+endfunc plat_crash_console_flush
+#endif
+
 	/* -----------------------------------------------------
 	 * Placeholder function which should be redefined by
-	 * each platform. This function should preserve x10.
+	 * each platform. This function should preserve x19 - x29.
 	 * -----------------------------------------------------
 	 */
 func plat_reset_handler
@@ -125,16 +162,6 @@ func bl1_plat_prepare_exit
 endfunc bl1_plat_prepare_exit
 
 	/* -----------------------------------------------------
-	 * void plat_error_handler(int err) __dead2;
-	 * Endless loop by default.
-	 * -----------------------------------------------------
-	 */
-func plat_error_handler
-	wfi
-	b	plat_error_handler
-endfunc plat_error_handler
-
-	/* -----------------------------------------------------
 	 * void plat_panic_handler(void) __dead2;
 	 * Endless loop by default.
 	 * -----------------------------------------------------
@@ -143,3 +170,54 @@ func plat_panic_handler
 	wfi
 	b	plat_panic_handler
 endfunc plat_panic_handler
+
+	/* -----------------------------------------------------
+	 * void bl31_plat_enable_mmu(uint32_t flags);
+	 *
+	 * Enable MMU in BL31.
+	 * -----------------------------------------------------
+	 */
+func bl31_plat_enable_mmu
+	b	enable_mmu_direct_el3
+endfunc bl31_plat_enable_mmu
+
+	/* -----------------------------------------------------
+	 * void bl32_plat_enable_mmu(uint32_t flags);
+	 *
+	 * Enable MMU in BL32.
+	 * -----------------------------------------------------
+	 */
+func bl32_plat_enable_mmu
+	b	enable_mmu_direct_el1
+endfunc bl32_plat_enable_mmu
+
+
+	/* -----------------------------------------------------
+	 * Platform handler for Uncontainable External Abort.
+	 *
+	 * x0: EA reason
+	 * x1: EA syndrome
+	 * -----------------------------------------------------
+	 */
+func plat_handle_uncontainable_ea
+	b	report_unhandled_exception
+endfunc plat_handle_uncontainable_ea
+
+	/* -----------------------------------------------------
+	 * Platform handler for Double Fault.
+	 *
+	 * x0: EA reason
+	 * x1: EA syndrome
+	 * -----------------------------------------------------
+	 */
+func plat_handle_double_fault
+	b	report_unhandled_exception
+endfunc plat_handle_double_fault
+
+	/* -----------------------------------------------------
+	 * Platform handler for EL3 External Abort.
+	 * -----------------------------------------------------
+	 */
+func plat_handle_el3_ea
+	b	report_unhandled_exception
+endfunc plat_handle_el3_ea

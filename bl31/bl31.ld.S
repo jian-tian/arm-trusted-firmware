@@ -1,34 +1,11 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <platform_def.h>
+#include <xlat_tables_defs.h>
 
 OUTPUT_FORMAT(PLATFORM_LINKER_FORMAT)
 OUTPUT_ARCH(PLATFORM_LINKER_ARCH)
@@ -39,11 +16,14 @@ MEMORY {
     RAM (rwx): ORIGIN = BL31_BASE, LENGTH = BL31_LIMIT - BL31_BASE
 }
 
+#ifdef PLAT_EXTRA_LD_SCRIPT
+#include <plat.ld.S>
+#endif
 
 SECTIONS
 {
     . = BL31_BASE;
-    ASSERT(. == ALIGN(4096),
+    ASSERT(. == ALIGN(PAGE_SIZE),
            "BL31_BASE address is not aligned on a page boundary.")
 
 #if SEPARATE_CODE_AND_RODATA
@@ -52,7 +32,7 @@ SECTIONS
         *bl31_entrypoint.o(.text*)
         *(.text*)
         *(.vectors)
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __TEXT_END__ = .;
     } >RAM
 
@@ -83,7 +63,11 @@ SECTIONS
         KEEP(*(cpu_ops))
         __CPU_OPS_END__ = .;
 
-        . = NEXT(4096);
+        /* Place pubsub sections for events */
+        . = ALIGN(8);
+#include <pubsub_events.h>
+
+        . = ALIGN(PAGE_SIZE);
         __RODATA_END__ = .;
     } >RAM
 #else
@@ -116,6 +100,10 @@ SECTIONS
         KEEP(*(cpu_ops))
         __CPU_OPS_END__ = .;
 
+        /* Place pubsub sections for events */
+        . = ALIGN(8);
+#include <pubsub_events.h>
+
         *(.vectors)
         __RO_END_UNALIGNED__ = .;
         /*
@@ -123,7 +111,7 @@ SECTIONS
          * executable.  No RW data from the next section must creep in.
          * Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __RO_END__ = .;
     } >RAM
 #endif
@@ -131,13 +119,35 @@ SECTIONS
     ASSERT(__CPU_OPS_END__ > __CPU_OPS_START__,
            "cpu_ops not defined for this platform.")
 
+#if ENABLE_SPM
+    /*
+     * Exception vectors of the SPM shim layer. They must be aligned to a 2K
+     * address, but we need to place them in a separate page so that we can set
+     * individual permissions to them, so the actual alignment needed is 4K.
+     *
+     * There's no need to include this into the RO section of BL31 because it
+     * doesn't need to be accessed by BL31.
+     */
+    spm_shim_exceptions : ALIGN(PAGE_SIZE) {
+        __SPM_SHIM_EXCEPTIONS_START__ = .;
+        *(.spm_shim_exceptions)
+        . = ALIGN(PAGE_SIZE);
+        __SPM_SHIM_EXCEPTIONS_END__ = .;
+    } >RAM
+#endif
+
     /*
      * Define a linker symbol to mark start of the RW memory area for this
      * image.
      */
     __RW_START__ = . ;
 
-    .data . : {
+    /*
+     * .data must be placed at a lower address than the stacks if the stack
+     * protector is enabled. Alternatively, the .data.stack_protector_canary
+     * section can be placed independently of the main .data section.
+     */
+   .data . : {
         __DATA_START__ = .;
         *(.data*)
         __DATA_END__ = .;
@@ -155,7 +165,8 @@ SECTIONS
 
     /*
      * The .bss section gets initialised to 0 at runtime.
-     * Its base address must be 16-byte aligned.
+     * Its base address should be 16-byte aligned for better performance of the
+     * zero-initialization code.
      */
     .bss (NOLOAD) : ALIGN(16) {
         __BSS_START__ = .;
@@ -206,7 +217,8 @@ SECTIONS
     /*
      * The xlat_table section is for full, aligned page tables (4K).
      * Removing them from .bss avoids forcing 4K alignment on
-     * the .bss section and eliminates the unecessary zero init
+     * the .bss section. The tables are initialized to zero by the translation
+     * tables library.
      */
     xlat_table (NOLOAD) : {
         *(xlat_table)
@@ -219,7 +231,7 @@ SECTIONS
      * are not mixed with normal data.  This is required to set up the correct
      * memory attributes for the coherent data page tables.
      */
-    coherent_ram (NOLOAD) : ALIGN(4096) {
+    coherent_ram (NOLOAD) : ALIGN(PAGE_SIZE) {
         __COHERENT_RAM_START__ = .;
         /*
          * Bakery locks are stored in coherent memory
@@ -234,7 +246,7 @@ SECTIONS
          * as device memory.  No other unexpected data must creep in.
          * Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __COHERENT_RAM_END__ = .;
     } >RAM
 #endif

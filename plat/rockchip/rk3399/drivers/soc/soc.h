@@ -1,35 +1,13 @@
 /*
  * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __SOC_H__
 #define __SOC_H__
+
+#include <utils.h>
 
 #define GLB_SRST_FST_CFG_VAL	0xfdb9
 #define GLB_SRST_SND_CFG_VAL	0xeca8
@@ -64,8 +42,8 @@
 #define PLL_NO_BYPASS_MODE		WMSK_BIT(PLL_BYPASS_SHIFT)
 
 #define PLL_CON_COUNT			0x06
-#define CRU_CLKSEL_COUNT		0x108
-#define CRU_CLKSEL_CON(n)		(0x80 + (n) * 4)
+#define CRU_CLKSEL_COUNT		108
+#define CRU_CLKSEL_CON(n)		(0x100 + (n) * 4)
 
 #define PMUCRU_CLKSEL_CONUT		0x06
 #define PMUCRU_CLKSEL_OFFSET		0x080
@@ -77,6 +55,43 @@
 #define CRU_GATE_COUNT		0x23
 #define PMUCRU_GATE_CON(n)	(0x100 + (n) * 4)
 #define CRU_GATE_CON(n)	(0x300 + (n) * 4)
+
+#define PMUCRU_RSTNHOLD_CON0	0x120
+enum {
+	PRESETN_NOC_PMU_HOLD = 1,
+	PRESETN_INTMEM_PMU_HOLD,
+	HRESETN_CM0S_PMU_HOLD,
+	HRESETN_CM0S_NOC_PMU_HOLD,
+	DRESETN_CM0S_PMU_HOLD,
+	POESETN_CM0S_PMU_HOLD,
+	PRESETN_SPI3_HOLD,
+	RESETN_SPI3_HOLD,
+	PRESETN_TIMER_PMU_0_1_HOLD,
+	RESETN_TIMER_PMU_0_HOLD,
+	RESETN_TIMER_PMU_1_HOLD,
+	PRESETN_UART_M0_PMU_HOLD,
+	RESETN_UART_M0_PMU_HOLD,
+	PRESETN_WDT_PMU_HOLD
+};
+
+#define PMUCRU_RSTNHOLD_CON1	0x124
+enum {
+	PRESETN_I2C0_HOLD,
+	PRESETN_I2C4_HOLD,
+	PRESETN_I2C8_HOLD,
+	PRESETN_MAILBOX_PMU_HOLD,
+	PRESETN_RKPWM_PMU_HOLD,
+	PRESETN_PMUGRF_HOLD,
+	PRESETN_SGRF_HOLD,
+	PRESETN_GPIO0_HOLD,
+	PRESETN_GPIO1_HOLD,
+	PRESETN_CRU_PMU_HOLD,
+	PRESETN_INTR_ARB_HOLD,
+	PRESETN_PVTM_PMU_HOLD,
+	RESETN_I2C0_HOLD,
+	RESETN_I2C4_HOLD,
+	RESETN_I2C8_HOLD
+};
 
 enum plls_id {
 	ALPLL_ID = 0,
@@ -105,12 +120,25 @@ enum glb_sft_reset {
 	PMU_RST_NOT_BY_SFT = BIT(3),
 };
 
+struct pll_div {
+	uint32_t mhz;
+	uint32_t refdiv;
+	uint32_t fbdiv;
+	uint32_t postdiv1;
+	uint32_t postdiv2;
+	uint32_t frac;
+	uint32_t freq;
+};
+
 struct deepsleep_data_s {
 	uint32_t plls_con[END_PLL_ID][PLL_CON_COUNT];
-	uint32_t pmucru_clksel_con[PMUCRU_CLKSEL_CONUT];
-	uint32_t cru_clksel_con[CRU_CLKSEL_COUNT];
 	uint32_t cru_gate_con[CRU_GATE_COUNT];
 	uint32_t pmucru_gate_con[PMUCRU_GATE_COUNT];
+};
+
+struct pmu_sleep_data {
+	uint32_t pmucru_rstnhold_con0;
+	uint32_t pmucru_rstnhold_con1;
 };
 
 /**************************************************
@@ -141,36 +169,6 @@ struct deepsleep_data_s {
 #define CYCL_24M_CNT_US(us)	(24 * us)
 #define CYCL_24M_CNT_MS(ms)	(ms * CYCL_24M_CNT_US(1000))
 #define CYCL_32K_CNT_MS(ms)	(ms * 32)
-
-/**************************************************
- * secure timer
- **************************************************/
-
-/* chanal0~5 */
-#define STIMER0_CHN_BASE(n)	(STIME_BASE + 0x20 * (n))
-/* chanal6~11 */
-#define STIMER1_CHN_BASE(n)	(STIME_BASE + 0x8000 + 0x20 * (n))
-
- /* low 32 bits */
-#define TIMER_END_COUNT0	0x00
- /* high 32 bits */
-#define TIMER_END_COUNT1	0x04
-
-#define TIMER_CURRENT_VALUE0	0x08
-#define TIMER_CURRENT_VALUE1	0x0C
-
- /* low 32 bits */
-#define TIMER_INIT_COUNT0	0x10
- /* high 32 bits */
-#define TIMER_INIT_COUNT1	0x14
-
-#define TIMER_INTSTATUS		0x18
-#define TIMER_CONTROL_REG	0x1c
-
-#define TIMER_EN			0x1
-
-#define TIMER_FMODE		(0x0 << 1)
-#define TIMER_RMODE		(0x1 << 1)
 
 /**************************************************
  * cru reg, offset
@@ -213,61 +211,6 @@ struct deepsleep_data_s {
 #define PCLK_GPIO0_GATE_SHIFT		3
 #define PCLK_GPIO1_GATE_SHIFT		4
 
-/**************************************************
- * sgrf reg, offset
- **************************************************/
-#define SGRF_SOC_CON0_1(n)		(0xc000 + (n) * 4)
-#define SGRF_SOC_CON3_7(n)		(0xe00c + ((n) - 3) * 4)
-#define SGRF_SOC_CON8_15(n)		(0x8020 + ((n) - 8) * 4)
-#define SGRF_PMU_SLV_CON0_1(n)		(0xc240 + ((n) - 0) * 4)
-#define SGRF_SLV_SECURE_CON0_4(n)	(0xe3c0 + ((n) - 0) * 4)
-#define SGRF_DDRRGN_CON0_16(n)		((n) * 4)
-#define SGRF_DDRRGN_CON20_34(n)		(0x50 + ((n) - 20) * 4)
-
-/* security config for master */
-#define SGRF_SOC_CON_WMSK		0xffff0000
-/* All of master in ns */
-#define SGRF_SOC_ALLMST_NS		0xffff
-
-/* security config for slave */
-#define SGRF_SLV_S_WMSK			0xffff0000
-#define SGRF_SLV_S_ALL_NS		0x0
-
-/* security config pmu slave ip */
-/* All of slaves  is ns */
-#define SGRF_PMU_SLV_S_NS		BIT_WITH_WMSK(0)
-/* slaves secure attr is configed */
-#define SGRF_PMU_SLV_S_CFGED		WMSK_BIT(0)
-#define SGRF_PMU_SLV_CRYPTO1_NS		WMSK_BIT(1)
-
-#define SGRF_PMUSRAM_S			BIT(8)
-
-#define SGRF_PMU_SLV_CON1_CFG		(SGRF_SLV_S_WMSK | \
-					SGRF_PMUSRAM_S)
-/* ddr region */
-#define SGRF_DDR_RGN_BYPS	BIT_WITH_WMSK(9) /* All of ddr rgn  is ns */
-
-/* The MST access the ddr rgn n with secure attribution */
-#define SGRF_L_MST_S_DDR_RGN(n)	BIT_WITH_WMSK((n))
-/* bits[16:8]*/
-#define SGRF_H_MST_S_DDR_RGN(n)	BIT_WITH_WMSK((n) + 8)
-
-/* dmac to periph s or ns*/
-#define SGRF_DMAC_CFG_S		0xffff0000
-
-#define DMAC1_RGN_NS			0xff000000
-#define DMAC0_RGN_NS			0x00ff0000
-
-#define DMAC0_BOOT_CFG_NS		0xfffffff8
-#define DMAC0_BOOT_PERIPH_NS		0xffff0fff
-#define DMAC0_BOOT_ADDR_NS		0xffff0000
-
-#define DMAC1_BOOT_CFG_NS		0xffff0008
-#define DMAC1_BOOT_PERIPH_L_NS		0xffff0fff
-#define DMAC1_BOOT_ADDR_NS		0xffff0000
-#define DMAC1_BOOT_PERIPH_H_NS		0xffffffff
-#define DMAC1_BOOT_IRQ_NS		0xffffffff
-
 #define CPU_BOOT_ADDR_WMASK	0xffff0000
 #define CPU_BOOT_ADDR_ALIGN	16
 
@@ -288,41 +231,54 @@ struct deepsleep_data_s {
 #define PWM_ENABLE			(1 << 0)
 
 /* grf reg offset */
+#define GRF_USBPHY0_CTRL0	0x4480
+#define GRF_USBPHY0_CTRL2	0x4488
+#define GRF_USBPHY0_CTRL3	0x448c
+#define GRF_USBPHY0_CTRL12	0x44b0
+#define GRF_USBPHY0_CTRL13	0x44b4
+#define GRF_USBPHY0_CTRL15	0x44bc
+#define GRF_USBPHY0_CTRL16	0x44c0
+
+#define GRF_USBPHY1_CTRL0	0x4500
+#define GRF_USBPHY1_CTRL2	0x4508
+#define GRF_USBPHY1_CTRL3	0x450c
+#define GRF_USBPHY1_CTRL12	0x4530
+#define GRF_USBPHY1_CTRL13	0x4534
+#define GRF_USBPHY1_CTRL15	0x453c
+#define GRF_USBPHY1_CTRL16	0x4540
+
+#define GRF_GPIO2A_IOMUX	0xe000
+#define GRF_GPIO2D_HE		0xe18c
 #define GRF_DDRC0_CON0		0xe380
 #define GRF_DDRC0_CON1		0xe384
 #define GRF_DDRC1_CON0		0xe388
 #define GRF_DDRC1_CON1		0xe38c
+#define GRF_SOC_CON_BASE	0xe200
+#define GRF_SOC_CON(n)		(GRF_SOC_CON_BASE + (n) * 4)
+#define GRF_IO_VSEL		0xe640
 
-/*
- * When system reset in running state, we want the cpus to be reboot
- * from maskrom (system reboot),
- * the pmusgrf reset-hold bits needs to be released.
- * When system wake up from system deep suspend, some soc will be reset
- * when waked up,
- * we want the bootcpu to be reboot from pmusram,
- * the pmusgrf reset-hold bits needs to be held.
- */
-static inline void pmu_sgrf_rst_hld_release(void)
-{
-	mmio_write_32(PMUCRU_BASE + CRU_PMU_RSTHOLD_CON(1),
-		      CRU_PMU_SGRF_RST_RLS);
-}
+#define CRU_CLKSEL_CON0		0x0100
+#define CRU_CLKSEL_CON6		0x0118
+#define CRU_SDIO0_CON1		0x058c
+#define PMUCRU_CLKSEL_CON0	0x0080
+#define PMUCRU_CLKGATE_CON2	0x0108
+#define PMUCRU_SOFTRST_CON0	0x0110
+#define PMUCRU_GATEDIS_CON0 0x0130
+#define PMUCRU_SOFTRST_CON(n)   (PMUCRU_SOFTRST_CON0 + (n) * 4)
 
-static inline void pmu_sgrf_rst_hld(void)
-{
-	mmio_write_32(PMUCRU_BASE + CRU_PMU_RSTHOLD_CON(1),
-		      CRU_PMU_SGRF_RST_HOLD);
-}
-
-/* funciton*/
+/* export related and operating SoC APIs */
 void __dead2 soc_global_soft_reset(void);
-void plls_suspend_prepare(void);
 void disable_dvfs_plls(void);
 void disable_nodvfs_plls(void);
-void plls_resume_finish(void);
 void enable_dvfs_plls(void);
 void enable_nodvfs_plls(void);
+void prepare_abpll_for_ddrctrl(void);
+void restore_abpll(void);
 void clk_gate_con_save(void);
 void clk_gate_con_disable(void);
 void clk_gate_con_restore(void);
+void set_pmu_rsthold(void);
+void pmu_sgrf_rst_hld(void);
+__pmusramfunc void pmu_sgrf_rst_hld_release(void);
+__pmusramfunc void restore_pmu_rsthold(void);
 #endif /* __SOC_H__ */

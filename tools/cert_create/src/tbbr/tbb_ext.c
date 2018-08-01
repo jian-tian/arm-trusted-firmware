@@ -1,39 +1,21 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+
+#if USE_TBBR_DEFS
+#include <tbbr_oid.h>
+#else
+#include <platform_oid.h>
+#endif
+
 #include "ext.h"
-#include "platform_oid.h"
 #include "tbbr/tbb_ext.h"
 #include "tbbr/tbb_key.h"
 
@@ -70,6 +52,26 @@ static ext_t tbb_ext[] = {
 		.ln = "Trusted Boot Firmware hash (SHA256)",
 		.asn1_type = V_ASN1_OCTET_STRING,
 		.type = EXT_TYPE_HASH
+	},
+	[TRUSTED_BOOT_FW_CONFIG_HASH_EXT] = {
+		.oid = TRUSTED_BOOT_FW_CONFIG_HASH_OID,
+		.opt = "tb-fw-config",
+		.help_msg = "Trusted Boot Firmware Config file",
+		.sn = "TrustedBootFirmwareConfigHash",
+		.ln = "Trusted Boot Firmware Config hash",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
+	},
+	[HW_CONFIG_HASH_EXT] = {
+		.oid = HW_CONFIG_HASH_OID,
+		.opt = "hw-config",
+		.help_msg = "HW Config file",
+		.sn = "HWConfigHash",
+		.ln = "HW Config hash",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
 	},
 	[TRUSTED_WORLD_PK_EXT] = {
 		.oid = TRUSTED_WORLD_PK_OID,
@@ -121,6 +123,16 @@ static ext_t tbb_ext[] = {
 		.asn1_type = V_ASN1_OCTET_STRING,
 		.type = EXT_TYPE_HASH
 	},
+	[SOC_FW_CONFIG_HASH_EXT] = {
+		.oid = SOC_FW_CONFIG_HASH_OID,
+		.opt = "soc-fw-config",
+		.help_msg = "SoC Firmware Config file",
+		.sn = "SocFirmwareConfigHash",
+		.ln = "SoC Firmware Config hash",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
+	},
 	[TRUSTED_OS_FW_CONTENT_CERT_PK_EXT] = {
 		.oid = TRUSTED_OS_FW_CONTENT_CERT_PK_OID,
 		.sn = "TrustedOSFirmwareContentCertPK",
@@ -138,6 +150,36 @@ static ext_t tbb_ext[] = {
 		.asn1_type = V_ASN1_OCTET_STRING,
 		.type = EXT_TYPE_HASH
 	},
+	[TRUSTED_OS_FW_EXTRA1_HASH_EXT] = {
+		.oid = TRUSTED_OS_FW_EXTRA1_HASH_OID,
+		.opt = "tos-fw-extra1",
+		.help_msg = "Trusted OS Extra1 image file",
+		.sn = "TrustedOSExtra1Hash",
+		.ln = "Trusted OS Extra1 hash (SHA256)",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
+	},
+	[TRUSTED_OS_FW_EXTRA2_HASH_EXT] = {
+		.oid = TRUSTED_OS_FW_EXTRA2_HASH_OID,
+		.opt = "tos-fw-extra2",
+		.help_msg = "Trusted OS Extra2 image file",
+		.sn = "TrustedOSExtra2Hash",
+		.ln = "Trusted OS Extra2 hash (SHA256)",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
+	},
+	[TRUSTED_OS_FW_CONFIG_HASH_EXT] = {
+		.oid = TRUSTED_OS_FW_CONFIG_HASH_OID,
+		.opt = "tos-fw-config",
+		.help_msg = "Trusted OS Firmware Config file",
+		.sn = "TrustedOSFirmwareConfigHash",
+		.ln = "Trusted OS Firmware Config hash",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
+	},
 	[NON_TRUSTED_FW_CONTENT_CERT_PK_EXT] = {
 		.oid = NON_TRUSTED_FW_CONTENT_CERT_PK_OID,
 		.sn = "NonTrustedFirmwareContentCertPK",
@@ -154,6 +196,16 @@ static ext_t tbb_ext[] = {
 		.ln = "Non-Trusted World hash (SHA256)",
 		.asn1_type = V_ASN1_OCTET_STRING,
 		.type = EXT_TYPE_HASH
+	},
+	[NON_TRUSTED_FW_CONFIG_HASH_EXT] = {
+		.oid = NON_TRUSTED_FW_CONFIG_HASH_OID,
+		.opt = "nt-fw-config",
+		.help_msg = "Non Trusted OS Firmware Config file",
+		.sn = "NonTrustedOSFirmwareConfigHash",
+		.ln = "Non-Trusted OS Firmware Config hash",
+		.asn1_type = V_ASN1_OCTET_STRING,
+		.type = EXT_TYPE_HASH,
+		.optional = 1
 	},
 	[SCP_FWU_CFG_HASH_EXT] = {
 		.oid = SCP_FWU_CFG_HASH_OID,

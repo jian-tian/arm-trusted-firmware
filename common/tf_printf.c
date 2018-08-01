@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <arch.h>
 #include <arch_helpers.h>
@@ -39,100 +15,24 @@
  * The tf_printf implementation for all BL stages
  ***********************************************************/
 
-#define get_num_va_args(args, lcount) \
-	(((lcount) > 1) ? va_arg(args, long long int) :	\
-	((lcount) ? va_arg(args, long int) : va_arg(args, int)))
+#define get_num_va_args(_args, _lcount) \
+	(((_lcount) > 1) ? va_arg(_args, long long int) :	\
+	((_lcount) ? va_arg(_args, long int) : va_arg(_args, int)))
 
-#define get_unum_va_args(args, lcount) \
-	(((lcount) > 1) ? va_arg(args, unsigned long long int) :	\
-	((lcount) ? va_arg(args, unsigned long int) : va_arg(args, unsigned int)))
+#define get_unum_va_args(_args, _lcount) \
+	(((_lcount) > 1) ? va_arg(_args, unsigned long long int) :	\
+	((_lcount) ? va_arg(_args, unsigned long int) : va_arg(_args, unsigned int)))
 
-static void string_print(const char *str)
+void tf_string_print(const char *str)
 {
+	assert(str);
+
 	while (*str)
 		putchar(*str++);
 }
 
-#ifdef AARCH32
-#define unsigned_num_print(unum, radix)			\
-	do {						\
-		if ((radix) == 16)			\
-			unsigned_hex_print(unum);	\
-		else if ((radix) == 10)			\
-			unsigned_dec_print(unum);	\
-		else					\
-			string_print("tf_printf : Unsupported radix");\
-	} while (0);
-
-/*
- * Utility function to print an unsigned number in decimal format for AArch32.
- * The function doesn't support printing decimal integers higher than 32 bits
- * to avoid having to implement 64-bit integer compiler library functions.
- */
-static void unsigned_dec_print(unsigned long long int unum)
-{
-	unsigned int local_num;
-	/* Just need enough space to store 32 bit decimal integer */
-	unsigned char num_buf[10];
-	int i = 0, rem;
-
-	if (unum > UINT_MAX) {
-		string_print("tf_printf : decimal numbers higher than 32 bits"
-				" not supported\n");
-		return;
-	}
-
-	local_num = (unsigned int)unum;
-
-	do {
-		rem = local_num % 10;
-		num_buf[i++] = '0' + rem;
-	} while (local_num /= 10);
-
-	while (--i >= 0)
-		putchar(num_buf[i]);
-}
-
-/*
- * Utility function to print an unsigned number in hexadecimal format for
- * AArch32. The function doesn't use 64-bit integer arithmetic to avoid
- * having to implement 64-bit compiler library functions. It splits the
- * 64 bit number into two 32 bit numbers and converts them into equivalent
- * ASCII characters.
- */
-static void unsigned_hex_print(unsigned long long int unum)
-{
-	/* Just need enough space to store 16 characters */
-	unsigned char num_buf[16];
-	int i = 0, rem;
-	uint32_t num_local = 0, num_msb = 0;
-
-	/* Get the LSB of 64 bit unum */
-	num_local = (uint32_t)unum;
-	/* Get the MSB of 64 bit unum. This works only on Little Endian */
-	assert((read_sctlr() & SCTLR_EE_BIT) == 0);
-	num_msb = *(((uint32_t *) &unum) + 1);
-
-	do {
-		do {
-			rem = (num_local & 0xf);
-			if (rem < 0xa)
-				num_buf[i++] = '0' + rem;
-			else
-				num_buf[i++] = 'a' + (rem - 0xa);
-		} while (num_local >>= 4);
-
-		num_local = num_msb;
-		num_msb = 0;
-	} while (num_local);
-
-	while (--i >= 0)
-		putchar(num_buf[i]);
-}
-
-#else
-
-static void unsigned_num_print(unsigned long long int unum, unsigned int radix)
+static void unsigned_num_print(unsigned long long int unum, unsigned int radix,
+			       char padc, int padn)
 {
 	/* Just need enough space to store 64 bit decimal integer */
 	unsigned char num_buf[20];
@@ -146,10 +46,15 @@ static void unsigned_num_print(unsigned long long int unum, unsigned int radix)
 			num_buf[i++] = 'a' + (rem - 0xa);
 	} while (unum /= radix);
 
+	if (padn > 0) {
+		while (i < padn--) {
+			putchar(padc);
+		}
+	}
+
 	while (--i >= 0)
 		putchar(num_buf[i]);
 }
-#endif /* AARCH32 */
 
 /*******************************************************************
  * Reduced format print for Trusted firmware.
@@ -165,20 +70,24 @@ static void unsigned_num_print(unsigned long long int unum, unsigned int radix)
  * %ll - long long int (64-bit on AArch64)
  * %z - size_t sized integer formats (64 bit on AArch64)
  *
+ * The following padding specifiers are supported by this print
+ * %0NN - Left-pad the number with 0s (NN is a decimal number)
+ *
  * The print exits on all other formats specifiers other than valid
  * combinations of the above specifiers.
  *******************************************************************/
-void tf_printf(const char *fmt, ...)
+void tf_vprintf(const char *fmt, va_list args)
 {
-	va_list args;
 	int l_count;
 	long long int num;
 	unsigned long long int unum;
 	char *str;
+	char padc = 0; /* Padding character */
+	int padn; /* Number of characters to pad */
 
-	va_start(args, fmt);
 	while (*fmt) {
 		l_count = 0;
+		padn = 0;
 
 		if (*fmt == '%') {
 			fmt++;
@@ -191,25 +100,28 @@ loop:
 				if (num < 0) {
 					putchar('-');
 					unum = (unsigned long long int)-num;
+					padn--;
 				} else
 					unum = (unsigned long long int)num;
 
-				unsigned_num_print(unum, 10);
+				unsigned_num_print(unum, 10, padc, padn);
 				break;
 			case 's':
 				str = va_arg(args, char *);
-				string_print(str);
+				tf_string_print(str);
 				break;
 			case 'p':
 				unum = (uintptr_t)va_arg(args, void *);
-				if (unum)
-					string_print("0x");
+				if (unum) {
+					tf_string_print("0x");
+					padn -= 2;
+				}
 
-				unsigned_num_print(unum, 16);
+				unsigned_num_print(unum, 16, padc, padn);
 				break;
 			case 'x':
 				unum = get_unum_va_args(args, l_count);
-				unsigned_num_print(unum, 16);
+				unsigned_num_print(unum, 16, padc, padn);
 				break;
 			case 'z':
 				if (sizeof(size_t) == 8)
@@ -223,17 +135,37 @@ loop:
 				goto loop;
 			case 'u':
 				unum = get_unum_va_args(args, l_count);
-				unsigned_num_print(unum, 10);
+				unsigned_num_print(unum, 10, padc, padn);
 				break;
+			case '0':
+				padc = '0';
+				padn = 0;
+				fmt++;
+
+				while (1) {
+					char ch = *fmt;
+					if (ch < '0' || ch > '9') {
+						goto loop;
+					}
+					padn = (padn * 10) + (ch - '0');
+					fmt++;
+				}
 			default:
 				/* Exit on any other format specifier */
-				goto exit;
+				return;
 			}
 			fmt++;
 			continue;
 		}
 		putchar(*fmt++);
 	}
-exit:
-	va_end(args);
+}
+
+void tf_printf(const char *fmt, ...)
+{
+	va_list va;
+
+	va_start(va, fmt);
+	tf_vprintf(fmt, va);
+	va_end(va);
 }

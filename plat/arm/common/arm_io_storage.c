@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #include <assert.h>
 #include <debug.h>
@@ -34,6 +10,8 @@
 #include <io_fip.h>
 #include <io_memmap.h>
 #include <io_storage.h>
+#include <plat_arm.h>
+#include <platform.h>
 #include <platform_def.h>
 #include <string.h>
 #include <utils.h>
@@ -65,8 +43,36 @@ static const io_uuid_spec_t bl32_uuid_spec = {
 	.uuid = UUID_SECURE_PAYLOAD_BL32,
 };
 
+static const io_uuid_spec_t bl32_extra1_uuid_spec = {
+	.uuid = UUID_SECURE_PAYLOAD_BL32_EXTRA1,
+};
+
+static const io_uuid_spec_t bl32_extra2_uuid_spec = {
+	.uuid = UUID_SECURE_PAYLOAD_BL32_EXTRA2,
+};
+
 static const io_uuid_spec_t bl33_uuid_spec = {
 	.uuid = UUID_NON_TRUSTED_FIRMWARE_BL33,
+};
+
+static const io_uuid_spec_t tb_fw_config_uuid_spec = {
+	.uuid = UUID_TB_FW_CONFIG,
+};
+
+static const io_uuid_spec_t hw_config_uuid_spec = {
+	.uuid = UUID_HW_CONFIG,
+};
+
+static const io_uuid_spec_t soc_fw_config_uuid_spec = {
+	.uuid = UUID_SOC_FW_CONFIG,
+};
+
+static const io_uuid_spec_t tos_fw_config_uuid_spec = {
+	.uuid = UUID_TOS_FW_CONFIG,
+};
+
+static const io_uuid_spec_t nt_fw_config_uuid_spec = {
+	.uuid = UUID_NT_FW_CONFIG,
 };
 
 #if TRUSTED_BOARD_BOOT
@@ -148,9 +154,44 @@ static const struct plat_io_policy policies[] = {
 		(uintptr_t)&bl32_uuid_spec,
 		open_fip
 	},
+	[BL32_EXTRA1_IMAGE_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&bl32_extra1_uuid_spec,
+		open_fip
+	},
+	[BL32_EXTRA2_IMAGE_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&bl32_extra2_uuid_spec,
+		open_fip
+	},
 	[BL33_IMAGE_ID] = {
 		&fip_dev_handle,
 		(uintptr_t)&bl33_uuid_spec,
+		open_fip
+	},
+	[TB_FW_CONFIG_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&tb_fw_config_uuid_spec,
+		open_fip
+	},
+	[HW_CONFIG_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&hw_config_uuid_spec,
+		open_fip
+	},
+	[SOC_FW_CONFIG_ID] = {
+			&fip_dev_handle,
+			(uintptr_t)&soc_fw_config_uuid_spec,
+			open_fip
+	},
+	[TOS_FW_CONFIG_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&tos_fw_config_uuid_spec,
+		open_fip
+	},
+	[NT_FW_CONFIG_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&nt_fw_config_uuid_spec,
 		open_fip
 	},
 #if TRUSTED_BOARD_BOOT

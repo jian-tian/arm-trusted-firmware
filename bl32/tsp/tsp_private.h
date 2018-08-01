@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2014, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __TSP_PRIVATE_H__
@@ -86,7 +62,7 @@ CASSERT(TSP_ARGS_SIZE == sizeof(tsp_args_t), assert_sp_args_size_mismatch);
 
 void tsp_get_magic(uint64_t args[4]);
 
-tsp_args_t *tsp_cpu_resume_main(uint64_t arg0,
+tsp_args_t *tsp_cpu_resume_main(uint64_t max_off_pwrlvl,
 				uint64_t arg1,
 				uint64_t arg2,
 				uint64_t arg3,
@@ -130,7 +106,47 @@ extern work_statistics_t tsp_stats[PLATFORM_CORE_COUNT];
 /* Vector table of jumps */
 extern tsp_vectors_t tsp_vector_table;
 
+/* functions */
+int32_t tsp_common_int_handler(void);
+int32_t tsp_handle_preemption(void);
 
+tsp_args_t *tsp_abort_smc_handler(uint64_t func,
+				  uint64_t arg1,
+				  uint64_t arg2,
+				  uint64_t arg3,
+				  uint64_t arg4,
+				  uint64_t arg5,
+				  uint64_t arg6,
+				  uint64_t arg7);
+
+tsp_args_t *tsp_smc_handler(uint64_t func,
+			       uint64_t arg1,
+			       uint64_t arg2,
+			       uint64_t arg3,
+			       uint64_t arg4,
+			       uint64_t arg5,
+			       uint64_t arg6,
+			       uint64_t arg7);
+
+tsp_args_t *tsp_system_reset_main(uint64_t arg0,
+				uint64_t arg1,
+				uint64_t arg2,
+				uint64_t arg3,
+				uint64_t arg4,
+				uint64_t arg5,
+				uint64_t arg6,
+				uint64_t arg7);
+
+tsp_args_t *tsp_system_off_main(uint64_t arg0,
+				uint64_t arg1,
+				uint64_t arg2,
+				uint64_t arg3,
+				uint64_t arg4,
+				uint64_t arg5,
+				uint64_t arg6,
+				uint64_t arg7);
+
+uint64_t tsp_main(void);
 #endif /* __ASSEMBLY__ */
 
 #endif /* __TSP_PRIVATE_H__ */

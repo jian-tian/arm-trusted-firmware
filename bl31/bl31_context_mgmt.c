@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
@@ -103,7 +79,13 @@ void *cm_get_context_by_mpidr(uint64_t mpidr, uint32_t security_state)
 {
 	assert(sec_state_is_valid(security_state));
 
+	/*
+	 * Suppress deprecated declaration warning in compatibility function
+	 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 	return cm_get_context_by_index(platform_get_core_pos(mpidr), security_state);
+#pragma GCC diagnostic pop
 }
 
 /*******************************************************************************
@@ -114,8 +96,14 @@ void cm_set_context_by_mpidr(uint64_t mpidr, void *context, uint32_t security_st
 {
 	assert(sec_state_is_valid(security_state));
 
+	/*
+	 * Suppress deprecated declaration warning in compatibility function
+	 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 	cm_set_context_by_index(platform_get_core_pos(mpidr),
 						 context, security_state);
+#pragma GCC diagnostic pop
 }
 
 /*******************************************************************************
@@ -123,12 +111,20 @@ void cm_set_context_by_mpidr(uint64_t mpidr, void *context, uint32_t security_st
  * existing cm library routines. This function is expected to be invoked for
  * initializing the cpu_context for the CPU specified by MPIDR for first use.
  ******************************************************************************/
-void cm_init_context(unsigned long mpidr, const entry_point_info_t *ep)
+void cm_init_context(uint64_t mpidr, const entry_point_info_t *ep)
 {
 	if ((mpidr & MPIDR_AFFINITY_MASK) ==
 			(read_mpidr_el1() & MPIDR_AFFINITY_MASK))
 		cm_init_my_context(ep);
-	else
+	else {
+		/*
+		 * Suppress deprecated declaration warning in compatibility
+		 * function
+		 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 		cm_init_context_by_index(platform_get_core_pos(mpidr), ep);
+#pragma GCC diagnostic pop
+	}
 }
-#endif
+#endif /* ERROR_DEPRECATED */

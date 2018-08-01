@@ -1,34 +1,11 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <platform_def.h>
+#include <xlat_tables_defs.h>
 
 OUTPUT_FORMAT(PLATFORM_LINKER_FORMAT)
 OUTPUT_ARCH(PLATFORM_LINKER_ARCH)
@@ -42,7 +19,7 @@ MEMORY {
 SECTIONS
 {
     . = BL2U_BASE;
-    ASSERT(. == ALIGN(4096),
+    ASSERT(. == ALIGN(PAGE_SIZE),
            "BL2U_BASE address is not aligned on a page boundary.")
 
 #if SEPARATE_CODE_AND_RODATA
@@ -51,14 +28,23 @@ SECTIONS
         *bl2u_entrypoint.o(.text*)
         *(.text*)
         *(.vectors)
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __TEXT_END__ = .;
+     } >RAM
+
+     /* .ARM.extab and .ARM.exidx are only added because Clang need them */
+     .ARM.extab . : {
+        *(.ARM.extab* .gnu.linkonce.armextab.*)
+     } >RAM
+
+     .ARM.exidx . : {
+        *(.ARM.exidx* .gnu.linkonce.armexidx.*)
      } >RAM
 
     .rodata . : {
         __RODATA_START__ = .;
         *(.rodata*)
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __RODATA_END__ = .;
     } >RAM
 #else
@@ -75,7 +61,7 @@ SECTIONS
          * read-only, executable.  No RW data from the next section must
          * creep in.  Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __RO_END__ = .;
     } >RAM
 #endif
@@ -86,6 +72,11 @@ SECTIONS
      */
     __RW_START__ = . ;
 
+    /*
+     * .data must be placed at a lower address than the stacks if the stack
+     * protector is enabled. Alternatively, the .data.stack_protector_canary
+     * section can be placed independently of the main .data section.
+     */
     .data . : {
         __DATA_START__ = .;
         *(.data*)
@@ -100,7 +91,8 @@ SECTIONS
 
     /*
      * The .bss section gets initialised to 0 at runtime.
-     * Its base address must be 16-byte aligned.
+     * Its base address should be 16-byte aligned for better performance of the
+     * zero-initialization code.
      */
     .bss : ALIGN(16) {
         __BSS_START__ = .;
@@ -112,7 +104,8 @@ SECTIONS
     /*
      * The xlat_table section is for full, aligned page tables (4K).
      * Removing them from .bss avoids forcing 4K alignment on
-     * the .bss section and eliminates the unecessary zero init
+     * the .bss section. The tables are initialized to zero by the translation
+     * tables library.
      */
     xlat_table (NOLOAD) : {
         *(xlat_table)
@@ -125,7 +118,7 @@ SECTIONS
      * are not mixed with normal data.  This is required to set up the correct
      * memory attributes for the coherent data page tables.
      */
-    coherent_ram (NOLOAD) : ALIGN(4096) {
+    coherent_ram (NOLOAD) : ALIGN(PAGE_SIZE) {
         __COHERENT_RAM_START__ = .;
         *(tzfw_coherent_mem)
         __COHERENT_RAM_END_UNALIGNED__ = .;
@@ -134,7 +127,7 @@ SECTIONS
          * as device memory.  No other unexpected data must creep in.
          * Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(4096);
+        . = ALIGN(PAGE_SIZE);
         __COHERENT_RAM_END__ = .;
     } >RAM
 #endif

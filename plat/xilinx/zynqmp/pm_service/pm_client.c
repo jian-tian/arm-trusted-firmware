@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 /*
@@ -35,27 +11,32 @@
 
 #include <assert.h>
 #include <bakery_lock.h>
-#include <gicv2.h>
-#include <gic_common.h>
 #include <bl_common.h>
+#include <gic_common.h>
+#include <gicv2.h>
 #include <mmio.h>
 #include <string.h>
 #include <utils.h>
+#include "../zynqmp_def.h"
 #include "pm_api_sys.h"
 #include "pm_client.h"
 #include "pm_ipi.h"
-#include "../zynqmp_def.h"
 
 #define IRQ_MAX		84
 #define NUM_GICD_ISENABLER	((IRQ_MAX >> 5) + 1)
 #define UNDEFINED_CPUID		(~0)
 
+#define PM_SUSPEND_MODE_STD		0
+#define PM_SUSPEND_MODE_POWER_OFF	1
+
 DEFINE_BAKERY_LOCK(pm_client_secure_lock);
 
 extern const struct pm_ipi apu_ipi;
 
+static uint32_t suspend_mode = PM_SUSPEND_MODE_STD;
+
 /* Order in pm_procs_all array must match cpu ids */
-static const struct pm_proc const pm_procs_all[] = {
+static const struct pm_proc pm_procs_all[] = {
 	{
 		.node_id = NODE_APU_0,
 		.pwrdn_mask = APU_0_PWRCTL_CPUPWRDWNREQ_MASK,
@@ -189,7 +170,20 @@ static void pm_client_set_wakeup_sources(void)
 	uint8_t pm_wakeup_nodes_set[NODE_MAX];
 	uintptr_t isenabler1 = BASE_GICD_BASE + GICD_ISENABLER + 4;
 
-	memset(&pm_wakeup_nodes_set, 0, sizeof(pm_wakeup_nodes_set));
+	/* In case of power-off suspend, only NODE_EXTERN must be set */
+	if (suspend_mode == PM_SUSPEND_MODE_POWER_OFF) {
+		enum pm_ret_status ret;
+
+		ret = pm_set_wakeup_source(NODE_APU, NODE_EXTERN, 1);
+		/**
+		 * If NODE_EXTERN could not be set as wake source, proceed with
+		 * standard suspend (no one will wake the system otherwise)
+		 */
+		if (ret == PM_RET_SUCCESS)
+			return;
+	}
+
+	zeromem(&pm_wakeup_nodes_set, sizeof(pm_wakeup_nodes_set));
 
 	for (reg_num = 0; reg_num < NUM_GICD_ISENABLER; reg_num++) {
 		uint32_t base_irq = reg_num << ISENABLER_SHIFT;
@@ -328,4 +322,14 @@ void pm_client_wakeup(const struct pm_proc *proc)
 	mmio_write_32(APU_PWRCTL, val);
 
 	bakery_lock_release(&pm_client_secure_lock);
+}
+
+enum pm_ret_status pm_set_suspend_mode(uint32_t mode)
+{
+	if ((mode != PM_SUSPEND_MODE_STD) &&
+	    (mode != PM_SUSPEND_MODE_POWER_OFF))
+		return PM_RET_ERROR_ARGS;
+
+	suspend_mode = mode;
+	return PM_RET_SUCCESS;
 }

@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
@@ -39,26 +15,23 @@
 
 #define BL32_END (uintptr_t)(&__BL32_END__)
 
-#if USE_COHERENT_MEM
-/*
- * The next 2 constants identify the extents of the coherent memory region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __COHERENT_RAM_START__ and __COHERENT_RAM_END__ linker symbols refer to
- * page-aligned addresses.
- */
-#define BL32_COHERENT_RAM_BASE (uintptr_t)(&__COHERENT_RAM_START__)
-#define BL32_COHERENT_RAM_LIMIT (uintptr_t)(&__COHERENT_RAM_END__)
-#endif
-
-
 static entry_point_info_t bl33_image_ep_info;
 
 /* Weak definitions may be overridden in specific ARM standard platform */
-#pragma weak sp_min_early_platform_setup
 #pragma weak sp_min_platform_setup
 #pragma weak sp_min_plat_arch_setup
+#pragma weak plat_arm_sp_min_early_platform_setup
 
+#define MAP_BL_SP_MIN_TOTAL	MAP_REGION_FLAT(			\
+					BL32_BASE,			\
+					BL32_END - BL32_BASE,		\
+					MT_MEMORY | MT_RW | MT_SECURE)
+
+/*
+ * Check that BL32_BASE is above ARM_TB_FW_CONFIG_LIMIT. The reserved page
+ * is required for SOC_FW_CONFIG/TOS_FW_CONFIG passed from BL2.
+ */
+CASSERT(BL32_BASE >= ARM_TB_FW_CONFIG_LIMIT, assert_bl32_base_overflows);
 
 /*******************************************************************************
  * Return a pointer to the 'entry_point_info' structure of the next image for the
@@ -83,10 +56,10 @@ entry_point_info_t *sp_min_plat_get_bl33_ep_info(void)
 }
 
 /*******************************************************************************
- * Perform early platform setup.
+ * Utility function to perform early platform setup.
  ******************************************************************************/
-void arm_sp_min_early_platform_setup(void *from_bl2,
-		void *plat_params_from_bl2)
+void arm_sp_min_early_platform_setup(void *from_bl2, uintptr_t tos_fw_config,
+			uintptr_t hw_config, void *plat_params_from_bl2)
 {
 	/* Initialize the console to provide early debug support */
 	console_init(PLAT_ARM_BOOT_UART_BASE, PLAT_ARM_BOOT_UART_CLK_IN_HZ,
@@ -142,10 +115,13 @@ void arm_sp_min_early_platform_setup(void *from_bl2,
 
 }
 
-void sp_min_early_platform_setup(void *from_bl2,
-		void *plat_params_from_bl2)
+/*******************************************************************************
+ * Default implementation for sp_min_platform_setup2() for ARM platforms
+ ******************************************************************************/
+void plat_arm_sp_min_early_platform_setup(u_register_t arg0, u_register_t arg1,
+			u_register_t arg2, u_register_t arg3)
 {
-	arm_sp_min_early_platform_setup(from_bl2, plat_params_from_bl2);
+	arm_sp_min_early_platform_setup((void *)arg0, arg1, arg2, (void *)arg3);
 
 	/*
 	 * Initialize Interconnect for this cluster during cold boot.
@@ -164,6 +140,23 @@ void sp_min_early_platform_setup(void *from_bl2,
 	plat_arm_interconnect_enter_coherency();
 }
 
+void sp_min_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+			u_register_t arg2, u_register_t arg3)
+{
+	plat_arm_sp_min_early_platform_setup(arg0, arg1, arg2, arg3);
+}
+
+/*******************************************************************************
+ * Perform any SP_MIN platform runtime setup prior to SP_MIN exit.
+ * Common to ARM standard platforms.
+ ******************************************************************************/
+void arm_sp_min_plat_runtime_setup(void)
+{
+	/* Initialize the runtime console */
+	console_init(PLAT_ARM_SP_MIN_RUN_UART_BASE,
+		PLAT_ARM_SP_MIN_RUN_UART_CLK_IN_HZ, ARM_CONSOLE_BAUDRATE);
+}
+
 /*******************************************************************************
  * Perform platform specific setup for SP_MIN
  ******************************************************************************/
@@ -179,6 +172,11 @@ void sp_min_platform_setup(void)
 	 */
 #if RESET_TO_SP_MIN
 	plat_arm_security_setup();
+
+#if defined(PLAT_ARM_MEM_PROT_ADDR)
+	arm_nor_psci_do_dyn_mem_protect();
+#endif /* PLAT_ARM_MEM_PROT_ADDR */
+
 #endif
 
 	/* Enable and initialize the System level generic timer */
@@ -192,24 +190,28 @@ void sp_min_platform_setup(void)
 	plat_arm_pwrc_setup();
 }
 
+void sp_min_plat_runtime_setup(void)
+{
+	arm_sp_min_plat_runtime_setup();
+}
+
 /*******************************************************************************
  * Perform the very early platform specific architectural setup here. At the
  * moment this only initializes the MMU
  ******************************************************************************/
 void sp_min_plat_arch_setup(void)
 {
-
-	arm_setup_page_tables(BL32_BASE,
-			      (BL32_END - BL32_BASE),
-			      BL_CODE_BASE,
-			      BL_CODE_LIMIT,
-			      BL_RO_DATA_BASE,
-			      BL_RO_DATA_LIMIT
+	const mmap_region_t bl_regions[] = {
+		MAP_BL_SP_MIN_TOTAL,
+		ARM_MAP_BL_CODE,
+		ARM_MAP_BL_RO_DATA,
 #if USE_COHERENT_MEM
-			      , BL32_COHERENT_RAM_BASE,
-			      BL32_COHERENT_RAM_LIMIT
+		ARM_MAP_BL_COHERENT_RAM,
 #endif
-			      );
+		{0}
+	};
+
+	arm_setup_page_tables(bl_regions, plat_arm_get_mmap());
 
 	enable_mmu_secure(0);
 }

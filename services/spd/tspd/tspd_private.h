@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2014, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __TSPD_PRIVATE_H__
@@ -57,7 +33,7 @@
 
 
 /*
- * This flag is used by the TSPD to determine if the TSP is servicing a standard
+ * This flag is used by the TSPD to determine if the TSP is servicing a yielding
  * SMC request prior to programming the next entry into the TSP e.g. if TSP
  * execution is preempted by a non-secure interrupt and handed control to the
  * normal world. If another request which is distinct from what the TSP was
@@ -65,15 +41,16 @@
  * reject the new request or service it while ensuring that the previous context
  * is not corrupted.
  */
-#define STD_SMC_ACTIVE_FLAG_SHIFT	2
-#define STD_SMC_ACTIVE_FLAG_MASK	1
-#define get_std_smc_active_flag(state)	((state >> STD_SMC_ACTIVE_FLAG_SHIFT) \
-					 & STD_SMC_ACTIVE_FLAG_MASK)
-#define set_std_smc_active_flag(state)	(state |=                             \
-					 1 << STD_SMC_ACTIVE_FLAG_SHIFT)
-#define clr_std_smc_active_flag(state)	(state &=                             \
-					 ~(STD_SMC_ACTIVE_FLAG_MASK           \
-					   << STD_SMC_ACTIVE_FLAG_SHIFT))
+#define YIELD_SMC_ACTIVE_FLAG_SHIFT	2
+#define YIELD_SMC_ACTIVE_FLAG_MASK	1
+#define get_yield_smc_active_flag(state)				\
+				((state >> YIELD_SMC_ACTIVE_FLAG_SHIFT) \
+				& YIELD_SMC_ACTIVE_FLAG_MASK)
+#define set_yield_smc_active_flag(state)	(state |=		\
+					1 << YIELD_SMC_ACTIVE_FLAG_SHIFT)
+#define clr_yield_smc_active_flag(state)	(state &=		\
+					~(YIELD_SMC_ACTIVE_FLAG_MASK	\
+					<< YIELD_SMC_ACTIVE_FLAG_SHIFT))
 
 /*******************************************************************************
  * Secure Payload execution state information i.e. aarch32 or aarch64
@@ -213,14 +190,14 @@ typedef struct tsp_context {
 } tsp_context_t;
 
 /* Helper macros to store and retrieve tsp args from tsp_context */
-#define store_tsp_args(tsp_ctx, x1, x2)		do {\
-				tsp_ctx->saved_tsp_args[0] = x1;\
-				tsp_ctx->saved_tsp_args[1] = x2;\
+#define store_tsp_args(_tsp_ctx, _x1, _x2)		do {\
+				_tsp_ctx->saved_tsp_args[0] = _x1;\
+				_tsp_ctx->saved_tsp_args[1] = _x2;\
 			} while (0)
 
-#define get_tsp_args(tsp_ctx, x1, x2)	do {\
-				x1 = tsp_ctx->saved_tsp_args[0];\
-				x2 = tsp_ctx->saved_tsp_args[1];\
+#define get_tsp_args(_tsp_ctx, _x1, _x2)	do {\
+				_x1 = _tsp_ctx->saved_tsp_args[0];\
+				_x2 = _tsp_ctx->saved_tsp_args[1];\
 			} while (0)
 
 /* TSPD power management handlers */
@@ -229,7 +206,7 @@ extern const spd_pm_ops_t tspd_pm;
 /*******************************************************************************
  * Forward declarations
  ******************************************************************************/
-struct tsp_vectors;
+typedef struct tsp_vectors tsp_vectors_t;
 
 /*******************************************************************************
  * Function & Data prototypes
@@ -238,13 +215,16 @@ uint64_t tspd_enter_sp(uint64_t *c_rt_ctx);
 void __dead2 tspd_exit_sp(uint64_t c_rt_ctx, uint64_t ret);
 uint64_t tspd_synchronous_sp_entry(tsp_context_t *tsp_ctx);
 void __dead2 tspd_synchronous_sp_exit(tsp_context_t *tsp_ctx, uint64_t ret);
-void tspd_init_tsp_ep_state(struct entry_point_info *tsp_ep,
+void tspd_init_tsp_ep_state(struct entry_point_info *tsp_entry_point,
 				uint32_t rw,
 				uint64_t pc,
 				tsp_context_t *tsp_ctx);
+int tspd_abort_preempted_smc(tsp_context_t *tsp_ctx);
+
+uint64_t tspd_handle_sp_preemption(void *handle);
 
 extern tsp_context_t tspd_sp_context[TSPD_CORE_COUNT];
-extern struct tsp_vectors *tsp_vectors;
+extern tsp_vectors_t *tsp_vectors;
 #endif /*__ASSEMBLY__*/
 
 #endif /* __TSPD_PRIVATE_H__ */

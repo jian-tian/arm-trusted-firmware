@@ -1,35 +1,13 @@
 /*
  * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __UART_16550_H__
 #define __UART_16550_H__
+
+#include <console.h>
 
 /* UART16550 Registers */
 #define UARTTX			0x0
@@ -45,6 +23,8 @@
 #define UARTMSR			0x18
 #define UARTSPR			0x1c
 #define UARTCSR			0x20
+/* Some instances have MDR1 defined as well */
+#define UARTMDR1		0x20
 #define UARTRXFIFOCFG		0x24
 #define UARTMIE			0x28
 #define UARTVNDR		0x2c
@@ -88,6 +68,29 @@
 #define UARTLSR_FERR		(1 << 3)	/* Framing Error */
 #define UARTLSR_PERR		(1 << 3)	/* Parity Error */
 #define UARTLSR_OVRF		(1 << 2)	/* Rx Overrun Error */
-#define UARTLSR_RDR		(1 << 2)	/* Rx Data Ready */
+#define UARTLSR_RDR_BIT		(0)		/* Rx Data Ready Bit */
+#define UARTLSR_RDR		(1 << UARTLSR_RDR_BIT)	/* Rx Data Ready */
+
+#define CONSOLE_T_16550_BASE	CONSOLE_T_DRVDATA
+
+#ifndef __ASSEMBLY__
+
+#include <types.h>
+
+typedef struct {
+	console_t console;
+	uintptr_t base;
+} console_16550_t;
+
+/*
+ * Initialize a new 16550 console instance and register it with the console
+ * framework. The |console| pointer must point to storage that will be valid
+ * for the lifetime of the console, such as a global or static local variable.
+ * Its contents will be reinitialized from scratch.
+ */
+int console_16550_register(uintptr_t baseaddr, uint32_t clock, uint32_t baud,
+			   console_16550_t *console);
+
+#endif /*__ASSEMBLY__*/
 
 #endif	/* __UART_16550_H__ */

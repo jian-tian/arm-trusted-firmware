@@ -2,6 +2,7 @@
 cscope.*
 *.swp
 *.patch
+*~
 .project
 .cproject
 
@@ -17,7 +18,13 @@ tools/cert_create/src/*.o
 tools/cert_create/src/**/*.o
 tools/cert_create/cert_create
 tools/cert_create/cert_create.exe
+tools/doimage/doimage
+tools/stm32image/*.o
+tools/stm32image/stm32image
+tools/stm32image/stm32image.exe
 
-# Ignore header files copied.
-tools/fiptool/firmware_image_package.h
-tools/fiptool/uuid.h
+# GNU GLOBAL files
+GPATH
+GRTAGS
+GSYMS
+GTAGS

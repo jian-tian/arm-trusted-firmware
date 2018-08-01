@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __GIC_COMMON_H__
@@ -36,20 +12,32 @@
  ******************************************************************************/
 /* Constants to categorise interrupts */
 #define MIN_SGI_ID		0
+#define MIN_SEC_SGI_ID		8
 #define MIN_PPI_ID		16
 #define MIN_SPI_ID		32
+#define MAX_SPI_ID		1019
+
+#define TOTAL_SPI_INTR_NUM	(MAX_SPI_ID - MIN_SPI_ID + 1)
+#define TOTAL_PCPU_INTR_NUM	(MIN_SPI_ID - MIN_SGI_ID)
 
 /* Mask for the priority field common to all GIC interfaces */
 #define GIC_PRI_MASK			0xff
 
+/* Mask for the configuration field common to all GIC interfaces */
+#define GIC_CFG_MASK			0x3
+
 /* Constant to indicate a spurious interrupt in all GIC versions */
 #define GIC_SPURIOUS_INTERRUPT		1023
 
+/* Interrupt configurations: 2-bit fields with LSB reserved */
+#define GIC_INTR_CFG_LEVEL		(0 << 1)
+#define GIC_INTR_CFG_EDGE		(1 << 1)
+
 /* Constants to categorise priorities */
-#define GIC_HIGHEST_SEC_PRIORITY	0
-#define GIC_LOWEST_SEC_PRIORITY		127
-#define GIC_HIGHEST_NS_PRIORITY		128
-#define GIC_LOWEST_NS_PRIORITY		254 /* 255 would disable an interrupt */
+#define GIC_HIGHEST_SEC_PRIORITY	0x0
+#define GIC_LOWEST_SEC_PRIORITY		0x7f
+#define GIC_HIGHEST_NS_PRIORITY		0x80
+#define GIC_LOWEST_NS_PRIORITY		0xfe /* 0xff would disable all interrupts */
 
 /*******************************************************************************
  * GIC Distributor interface register offsets that are common to GICv3 & GICv2
@@ -84,6 +72,8 @@
 #define ARCH_REV_GICV3		0x3
 /* GICv2 revision as reported by the PIDR2 register */
 #define ARCH_REV_GICV2		0x2
+/* GICv1 revision as reported by the PIDR2 register */
+#define ARCH_REV_GICV1		0x1
 
 #define IGROUPR_SHIFT		5
 #define ISENABLER_SHIFT		5
@@ -93,6 +83,7 @@
 #define ISACTIVER_SHIFT		5
 #define ICACTIVER_SHIFT		ISACTIVER_SHIFT
 #define IPRIORITYR_SHIFT	2
+#define ITARGETSR_SHIFT		2
 #define ICFGR_SHIFT		4
 #define NSACR_SHIFT		4
 

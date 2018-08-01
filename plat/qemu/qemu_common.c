@@ -1,38 +1,14 @@
 /*
  * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch_helpers.h>
 #include <bl_common.h>
 #include <platform_def.h>
+#include <arm_xlat_tables.h>
 #include "qemu_private.h"
-#include <xlat_tables.h>
 
 #define MAP_DEVICE0	MAP_REGION_FLAT(DEVICE0_BASE,			\
 					DEVICE0_SIZE,			\
@@ -68,7 +44,7 @@
  * This doesn't include TZRAM as the 'mem_layout' argument passed to
  * arm_configure_mmu_elx() will give the available subset of that,
  */
-#if IMAGE_BL1
+#ifdef IMAGE_BL1
 static const mmap_region_t plat_qemu_mmap[] = {
 	MAP_FLASH0,
 	MAP_SHARED_RAM,
@@ -82,7 +58,7 @@ static const mmap_region_t plat_qemu_mmap[] = {
 	{0}
 };
 #endif
-#if IMAGE_BL2
+#ifdef IMAGE_BL2
 static const mmap_region_t plat_qemu_mmap[] = {
 	MAP_FLASH0,
 	MAP_SHARED_RAM,
@@ -98,7 +74,7 @@ static const mmap_region_t plat_qemu_mmap[] = {
 	{0}
 };
 #endif
-#if IMAGE_BL31
+#ifdef IMAGE_BL31
 static const mmap_region_t plat_qemu_mmap[] = {
 	MAP_SHARED_RAM,
 	MAP_DEVICE0,
@@ -109,6 +85,16 @@ static const mmap_region_t plat_qemu_mmap[] = {
 	{0}
 };
 #endif
+#ifdef IMAGE_BL32
+static const mmap_region_t plat_qemu_mmap[] = {
+	MAP_SHARED_RAM,
+	MAP_DEVICE0,
+#ifdef MAP_DEVICE1
+	MAP_DEVICE1,
+#endif
+	{0}
+};
+#endif
 
 /*******************************************************************************
  * Macro generating the code for the function setting up the pagetables as per
@@ -116,8 +102,10 @@ static const mmap_region_t plat_qemu_mmap[] = {
  ******************************************************************************/
 
 #define DEFINE_CONFIGURE_MMU_EL(_el)					\
-	void qemu_configure_mmu_el##_el(unsigned long total_base,	\
+	void qemu_configure_mmu_##_el(unsigned long total_base,	\
 				   unsigned long total_size,		\
+				   unsigned long code_start,		\
+				   unsigned long code_limit,		\
 				   unsigned long ro_start,		\
 				   unsigned long ro_limit,		\
 				   unsigned long coh_start,		\
@@ -126,20 +114,27 @@ static const mmap_region_t plat_qemu_mmap[] = {
 		mmap_add_region(total_base, total_base,			\
 				total_size,				\
 				MT_MEMORY | MT_RW | MT_SECURE);		\
+		mmap_add_region(code_start, code_start,			\
+				code_limit - code_start,		\
+				MT_CODE | MT_SECURE);			\
 		mmap_add_region(ro_start, ro_start,			\
 				ro_limit - ro_start,			\
-				MT_MEMORY | MT_RO | MT_SECURE);		\
+				MT_RO_DATA | MT_SECURE);		\
 		mmap_add_region(coh_start, coh_start,			\
 				coh_limit - coh_start,			\
 				MT_DEVICE | MT_RW | MT_SECURE);		\
 		mmap_add(plat_qemu_mmap);				\
 		init_xlat_tables();					\
 									\
-		enable_mmu_el##_el(0);					\
+		enable_mmu_##_el(0);					\
 	}
 
 /* Define EL1 and EL3 variants of the function initialising the MMU */
-DEFINE_CONFIGURE_MMU_EL(1)
-DEFINE_CONFIGURE_MMU_EL(3)
+#ifdef AARCH32
+DEFINE_CONFIGURE_MMU_EL(secure)
+#else
+DEFINE_CONFIGURE_MMU_EL(el1)
+DEFINE_CONFIGURE_MMU_EL(el3)
+#endif
 
 

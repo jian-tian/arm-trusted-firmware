@@ -1,31 +1,7 @@
 /*
  * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 #ifndef __ROCKCHIP_PLAT_MACROS_S__
 #define __ROCKCHIP_PLAT_MACROS_S__
@@ -62,14 +38,14 @@ cci_iface_regs:
 	 * The below utility macro prints out relevant GIC
 	 * and CCI registers whenever an unhandled
 	 * exception is taken in BL31.
-	 * Expects: GICD base in x16, GICC base in x17
+	 * Expects: GICD base in x26, GICC base in x27
 	 * Clobbers: x0 - x10, sp
 	 * ---------------------------------------------
 	 */
 	.macro plat_crash_print_regs
 
-	mov_imm	x16, PLAT_RK_GICD_BASE
-	mov_imm	x17, PLAT_RK_GICC_BASE
+	mov_imm	x26, PLAT_RK_GICD_BASE
+	mov_imm	x27, PLAT_RK_GICC_BASE
 
 	/* Check for GICv3 system register access */
 	mrs	x7, id_aa64pfr0_el1
@@ -96,19 +72,19 @@ print_gicv2:
 	/* Load the gicc reg list to x6 */
 	adr	x6, gicc_regs
 	/* Load the gicc regs to gp regs used by str_in_crash_buf_print */
-	ldr	w8, [x17, #GICC_HPPIR]
-	ldr	w9, [x17, #GICC_AHPPIR]
-	ldr	w10, [x17, #GICC_CTLR]
+	ldr	w8, [x27, #GICC_HPPIR]
+	ldr	w9, [x27, #GICC_AHPPIR]
+	ldr	w10, [x27, #GICC_CTLR]
 	/* Store to the crash buf and print to console */
 	bl	str_in_crash_buf_print
 
 print_gic_common:
 	/* Print the GICD_ISPENDR regs */
-	add	x7, x16, #GICD_ISPENDR
+	add	x7, x26, #GICD_ISPENDR
 	adr	x4, gicd_pend_reg
 	bl	asm_print_str
 gicd_ispendr_loop:
-	sub	x4, x7, x16
+	sub	x4, x7, x26
 	cmp	x4, #0x280
 	b.eq	exit_print_gic_regs
 	bl	asm_print_hex

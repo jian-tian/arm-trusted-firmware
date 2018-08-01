@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
@@ -43,8 +19,6 @@
  * 'rt_svc_descs_indices' array. This gives the index of the descriptor in the
  * 'rt_svc_descs' array which contains the SMC handler.
  ******************************************************************************/
-#define RT_SVC_DESCS_START	((uintptr_t) (&__RT_SVC_DESCS_START__))
-#define RT_SVC_DESCS_END	((uintptr_t) (&__RT_SVC_DESCS_END__))
 uint8_t rt_svc_descs_indices[MAX_RT_SVCS];
 static rt_svc_desc_t *rt_svc_descs;
 
@@ -52,23 +26,26 @@ static rt_svc_desc_t *rt_svc_descs;
 					/ sizeof(rt_svc_desc_t))
 
 /*******************************************************************************
- * Function to invoke the registered `handle` corresponding to the smc_fid.
+ * Function to invoke the registered `handle` corresponding to the smc_fid in
+ * AArch32 mode.
  ******************************************************************************/
+#if SMCCC_MAJOR_VERSION == 1
 uintptr_t handle_runtime_svc(uint32_t smc_fid,
 			     void *cookie,
 			     void *handle,
 			     unsigned int flags)
 {
 	u_register_t x1, x2, x3, x4;
-	int index, idx;
+	int index;
+	unsigned int idx;
 	const rt_svc_desc_t *rt_svc_descs;
 
 	assert(handle);
 	idx = get_unique_oen_from_smc_fid(smc_fid);
-	assert(idx >= 0 && idx < MAX_RT_SVCS);
+	assert(idx < MAX_RT_SVCS);
 
 	index = rt_svc_descs_indices[idx];
-	if (index < 0 || index >= RT_SVC_DECS_NUM)
+	if (index < 0 || index >= (int)RT_SVC_DECS_NUM)
 		SMC_RET1(handle, SMC_UNK);
 
 	rt_svc_descs = (rt_svc_desc_t *) RT_SVC_DESCS_START;
@@ -78,6 +55,7 @@ uintptr_t handle_runtime_svc(uint32_t smc_fid,
 	return rt_svc_descs[index].handle(smc_fid, x1, x2, x3, x4, cookie,
 						handle, flags);
 }
+#endif /* SMCCC_MAJOR_VERSION */
 
 /*******************************************************************************
  * Simple routine to sanity check a runtime service descriptor before using it
@@ -93,11 +71,17 @@ static int32_t validate_rt_svc_desc(const rt_svc_desc_t *desc)
 	if (desc->end_oen >= OEN_LIMIT)
 		return -EINVAL;
 
-	if (desc->call_type != SMC_TYPE_FAST && desc->call_type != SMC_TYPE_STD)
+#if SMCCC_MAJOR_VERSION == 1
+	if ((desc->call_type != SMC_TYPE_FAST) &&
+	    (desc->call_type != SMC_TYPE_YIELD))
 		return -EINVAL;
+#elif SMCCC_MAJOR_VERSION == 2
+	if (desc->is_vendor > 1U)
+		return -EINVAL;
+#endif /* SMCCC_MAJOR_VERSION */
 
 	/* A runtime service having no init or handle function doesn't make sense */
-	if (desc->init == NULL && desc->handle == NULL)
+	if ((desc->init == NULL) && (desc->handle == NULL))
 		return -EINVAL;
 
 	return 0;
@@ -112,14 +96,15 @@ static int32_t validate_rt_svc_desc(const rt_svc_desc_t *desc)
  ******************************************************************************/
 void runtime_svc_init(void)
 {
-	int rc = 0, index, start_idx, end_idx;
+	int rc = 0;
+	unsigned int index, start_idx, end_idx;
 
 	/* Assert the number of descriptors detected are less than maximum indices */
 	assert((RT_SVC_DESCS_END >= RT_SVC_DESCS_START) &&
 			(RT_SVC_DECS_NUM < MAX_RT_SVCS));
 
 	/* If no runtime services are implemented then simply bail out */
-	if (RT_SVC_DECS_NUM == 0)
+	if (RT_SVC_DECS_NUM == 0U)
 		return;
 
 	/* Initialise internal variables to invalid state */
@@ -143,7 +128,7 @@ void runtime_svc_init(void)
 
 		/*
 		 * The runtime service may have separate rt_svc_desc_t
-		 * for its fast smc and standard smc. Since the service itself
+		 * for its fast smc and yielding smc. Since the service itself
 		 * need to be initialized only once, only one of them will have
 		 * an initialisation routine defined. Call the initialisation
 		 * routine for this runtime service, if it is defined.
@@ -163,11 +148,18 @@ void runtime_svc_init(void)
 		 * descriptor which will handle the SMCs for this owning
 		 * entity range.
 		 */
-		start_idx = get_unique_oen(rt_svc_descs[index].start_oen,
-				service->call_type);
-		assert(start_idx < MAX_RT_SVCS);
-		end_idx = get_unique_oen(rt_svc_descs[index].end_oen,
-				service->call_type);
+#if SMCCC_MAJOR_VERSION == 1
+		start_idx = get_unique_oen(service->start_oen,
+					   service->call_type);
+		end_idx = get_unique_oen(service->end_oen,
+					 service->call_type);
+#elif SMCCC_MAJOR_VERSION == 2
+		start_idx = get_rt_desc_idx(service->start_oen,
+					    service->is_vendor);
+		end_idx = get_rt_desc_idx(service->end_oen,
+					  service->is_vendor);
+#endif
+		assert(start_idx <= end_idx);
 		assert(end_idx < MAX_RT_SVCS);
 		for (; start_idx <= end_idx; start_idx++)
 			rt_svc_descs_indices[start_idx] = index;

@@ -1,48 +1,40 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #ifndef __PLATFORM_DEF_H__
 #define __PLATFORM_DEF_H__
 
+/* Enable the dynamic translation tables library. */
+#ifdef AARCH32
+# if defined(IMAGE_BL32) && RESET_TO_SP_MIN
+#  define PLAT_XLAT_TABLES_DYNAMIC     1
+# endif
+#else
+# if defined(IMAGE_BL31) && RESET_TO_BL31
+#  define PLAT_XLAT_TABLES_DYNAMIC     1
+# endif
+#endif /* AARCH32 */
+
 #include <arm_def.h>
+#include <arm_spm_def.h>
 #include <board_arm_def.h>
 #include <common_def.h>
 #include <tzc400.h>
+#include <utils_def.h>
 #include <v2m_def.h>
 #include "../fvp_def.h"
 
 /* Required platform porting definitions */
+#define PLATFORM_CORE_COUNT \
+	(FVP_CLUSTER_COUNT * FVP_MAX_CPUS_PER_CLUSTER * FVP_MAX_PE_PER_CPU)
+
 #define PLAT_NUM_PWR_DOMAINS		(FVP_CLUSTER_COUNT + \
-					PLATFORM_CORE_COUNT)
-#define PLAT_MAX_PWR_LVL		ARM_PWR_LVL1
-#define PLATFORM_CORE_COUNT		(FVP_CLUSTER_COUNT * FVP_MAX_CPUS_PER_CLUSTER)
+					PLATFORM_CORE_COUNT) + 1
+
+#define PLAT_MAX_PWR_LVL		ARM_PWR_LVL2
 
 /*
  * Other platform porting definitions are provided by included headers
@@ -59,15 +51,18 @@
 #define PLAT_ARM_TRUSTED_DRAM_BASE	0x06000000
 #define PLAT_ARM_TRUSTED_DRAM_SIZE	0x02000000	/* 32 MB */
 
-/* No SCP in FVP */
-#define PLAT_ARM_SCP_TZC_DRAM1_SIZE	MAKE_ULL(0x0)
+/* virtual address used by dynamic mem_protect for chunk_base */
+#define PLAT_ARM_MEM_PROTEC_VA_FRAME	0xc0000000
 
-#define PLAT_ARM_DRAM2_SIZE		MAKE_ULL(0x780000000)
+/* No SCP in FVP */
+#define PLAT_ARM_SCP_TZC_DRAM1_SIZE	ULL(0x0)
+
+#define PLAT_ARM_DRAM2_SIZE		ULL(0x80000000)
 
 /*
  * Load address of BL33 for this platform port
  */
-#define PLAT_ARM_NS_IMAGE_OFFSET	(ARM_DRAM1_BASE + 0x8000000)
+#define PLAT_ARM_NS_IMAGE_OFFSET	(ARM_DRAM1_BASE + U(0x8000000))
 
 
 /*
@@ -79,16 +74,26 @@
 #define PLAT_ARM_BL31_RUN_UART_BASE		V2M_IOFPGA_UART1_BASE
 #define PLAT_ARM_BL31_RUN_UART_CLK_IN_HZ	V2M_IOFPGA_UART1_CLK_IN_HZ
 
+#define PLAT_ARM_SP_MIN_RUN_UART_BASE		V2M_IOFPGA_UART1_BASE
+#define PLAT_ARM_SP_MIN_RUN_UART_CLK_IN_HZ	V2M_IOFPGA_UART1_CLK_IN_HZ
+
 #define PLAT_ARM_CRASH_UART_BASE	PLAT_ARM_BL31_RUN_UART_BASE
 #define PLAT_ARM_CRASH_UART_CLK_IN_HZ	PLAT_ARM_BL31_RUN_UART_CLK_IN_HZ
 
 #define PLAT_ARM_TSP_UART_BASE		V2M_IOFPGA_UART2_BASE
 #define PLAT_ARM_TSP_UART_CLK_IN_HZ	V2M_IOFPGA_UART2_CLK_IN_HZ
 
+#define PLAT_FVP_SMMUV3_BASE		0x2b400000
+
 /* CCI related constants */
-#define PLAT_ARM_CCI_BASE		0x2c090000
-#define PLAT_ARM_CCI_CLUSTER0_SL_IFACE_IX	3
-#define PLAT_ARM_CCI_CLUSTER1_SL_IFACE_IX	4
+#define PLAT_FVP_CCI400_BASE		0x2c090000
+#define PLAT_FVP_CCI400_CLUS0_SL_PORT	3
+#define PLAT_FVP_CCI400_CLUS1_SL_PORT	4
+
+/* CCI-500/CCI-550 on Base platform */
+#define PLAT_FVP_CCI5XX_BASE		0x2a000000
+#define PLAT_FVP_CCI5XX_CLUS0_SL_PORT	5
+#define PLAT_FVP_CCI5XX_CLUS1_SL_PORT	6
 
 /* CCN related constants. Only CCN 502 is currently supported */
 #define PLAT_ARM_CCN_BASE		0x2e000000
@@ -145,5 +150,20 @@
 					FVP_IRQ_SEC_SYS_TIMER
 
 #define PLAT_ARM_G0_IRQS		ARM_G0_IRQS
+
+#define PLAT_ARM_G1S_IRQ_PROPS(grp) \
+	ARM_G1S_IRQ_PROPS(grp), \
+	INTR_PROP_DESC(FVP_IRQ_TZ_WDOG, GIC_HIGHEST_SEC_PRIORITY, grp, \
+			GIC_INTR_CFG_LEVEL), \
+	INTR_PROP_DESC(FVP_IRQ_SEC_SYS_TIMER, GIC_HIGHEST_SEC_PRIORITY, grp, \
+			GIC_INTR_CFG_LEVEL)
+
+#define PLAT_ARM_G0_IRQ_PROPS(grp)	ARM_G0_IRQ_PROPS(grp)
+
+#define PLAT_ARM_PRIVATE_SDEI_EVENTS	ARM_SDEI_PRIVATE_EVENTS
+#define PLAT_ARM_SHARED_SDEI_EVENTS	ARM_SDEI_SHARED_EVENTS
+
+#define PLAT_ARM_SP_IMAGE_STACK_BASE	(ARM_SP_IMAGE_NS_BUF_BASE +	\
+					 ARM_SP_IMAGE_NS_BUF_SIZE)
 
 #endif /* __PLATFORM_DEF_H__ */

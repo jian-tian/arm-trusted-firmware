@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <gicv2.h>
@@ -47,16 +23,20 @@
  * On a GICv2 system, the Group 1 secure interrupts are treated as Group 0
  * interrupts.
  *****************************************************************************/
-static const unsigned int g0_interrupt_array[] = {
-	PLAT_ARM_G1S_IRQS,
-	PLAT_ARM_G0_IRQS
+static const interrupt_prop_t arm_interrupt_props[] = {
+	PLAT_ARM_G1S_IRQ_PROPS(GICV2_INTR_GROUP0),
+	PLAT_ARM_G0_IRQ_PROPS(GICV2_INTR_GROUP0)
 };
+
+static unsigned int target_mask_array[PLATFORM_CORE_COUNT];
 
 static const gicv2_driver_data_t arm_gic_data = {
 	.gicd_base = PLAT_ARM_GICD_BASE,
 	.gicc_base = PLAT_ARM_GICC_BASE,
-	.g0_interrupt_num = ARRAY_SIZE(g0_interrupt_array),
-	.g0_interrupt_array = g0_interrupt_array,
+	.interrupt_props = arm_interrupt_props,
+	.interrupt_props_num = ARRAY_SIZE(arm_interrupt_props),
+	.target_masks = target_mask_array,
+	.target_masks_num = ARRAY_SIZE(target_mask_array),
 };
 
 /******************************************************************************
@@ -71,6 +51,7 @@ void plat_arm_gic_init(void)
 {
 	gicv2_distif_init();
 	gicv2_pcpu_distif_init();
+	gicv2_set_pe_target_mask(plat_my_core_pos());
 	gicv2_cpuif_enable();
 }
 
@@ -95,5 +76,38 @@ void plat_arm_gic_cpuif_disable(void)
  *****************************************************************************/
 void plat_arm_gic_pcpu_init(void)
 {
+	gicv2_pcpu_distif_init();
+	gicv2_set_pe_target_mask(plat_my_core_pos());
+}
+
+/******************************************************************************
+ * Stubs for Redistributor power management. Although GICv2 doesn't have
+ * Redistributor interface, these are provided for the sake of uniform GIC API
+ *****************************************************************************/
+void plat_arm_gic_redistif_on(void)
+{
+	return;
+}
+
+void plat_arm_gic_redistif_off(void)
+{
+	return;
+}
+
+
+/******************************************************************************
+ * ARM common helper to save & restore the GICv3 on resume from system suspend.
+ * The normal world currently takes care of saving and restoring the GICv2
+ * registers due to legacy reasons. Hence we just initialize the Distributor
+ * on resume from system suspend.
+ *****************************************************************************/
+void plat_arm_gic_save(void)
+{
+	return;
+}
+
+void plat_arm_gic_resume(void)
+{
+	gicv2_distif_init();
 	gicv2_pcpu_distif_init();
 }

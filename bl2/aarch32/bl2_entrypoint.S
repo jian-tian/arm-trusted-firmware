@@ -1,31 +1,7 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
@@ -50,12 +26,14 @@ vector_base bl2_vector_table
 
 func bl2_entrypoint
 	/*---------------------------------------------
-	 * Save from r1 the extents of the trusted ram
-	 * available to BL2 for future use.
-	 * r0 is not currently used.
+	 * Save arguments x0 - x3 from BL1 for future
+	 * use.
 	 * ---------------------------------------------
 	 */
- 	mov	r11, r1
+	mov	r9, r0
+	mov	r10, r1
+	mov	r11, r2
+	mov	r12, r3
 
 	/* ---------------------------------------------
 	 * Set the exception vector to something sane.
@@ -122,12 +100,24 @@ func bl2_entrypoint
 	bl	plat_set_my_stack
 
 	/* ---------------------------------------------
+	 * Initialize the stack protector canary before
+	 * any C code is called.
+	 * ---------------------------------------------
+	 */
+#if STACK_PROTECTOR_ENABLED
+	bl	update_stack_protector_canary
+#endif
+
+	/* ---------------------------------------------
 	 * Perform early platform setup & platform
 	 * specific early arch. setup e.g. mmu setup
 	 * ---------------------------------------------
 	 */
-	mov	r0, r11
-	bl	bl2_early_platform_setup
+	mov	r0, r9
+	mov	r1, r10
+	mov	r2, r11
+	mov	r3, r12
+	bl	bl2_early_platform_setup2
 	bl	bl2_plat_arch_setup
 
 	/* ---------------------------------------------
@@ -140,6 +130,6 @@ func bl2_entrypoint
 	 * Should never reach this point.
 	 * ---------------------------------------------
 	 */
-	bl	plat_panic_handler
+	no_ret	plat_panic_handler
 
 endfunc bl2_entrypoint

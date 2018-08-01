@@ -1,31 +1,7 @@
 /*
  * Copyright (c) 2013-2015, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 /*
@@ -43,15 +19,20 @@
 #define PAYLOAD_ARG_CNT		6U
 #define PAYLOAD_ARG_SIZE	4U	/* size in bytes */
 
+#define ZYNQMP_TZ_VERSION_MAJOR		1
+#define ZYNQMP_TZ_VERSION_MINOR		0
+#define ZYNQMP_TZ_VERSION		((ZYNQMP_TZ_VERSION_MAJOR << 16) | \
+					ZYNQMP_TZ_VERSION_MINOR)
+
 /**
  * pm_ipi - struct for capturing IPI-channel specific info
- * @mask	mask for enabling/disabling and triggering the IPI
- * @base	base address for IPI
+ * @apu_ipi_id	APU IPI agent ID
+ * @pmu_ipi_id	PMU Agent ID
  * @buffer_base	base address for payload buffer
  */
 struct pm_ipi {
-	const unsigned int mask;
-	const uintptr_t base;
+	const uint32_t apu_ipi_id;
+	const uint32_t pmu_ipi_id;
 	const uintptr_t buffer_base;
 };
 

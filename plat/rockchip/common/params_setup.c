@@ -1,43 +1,20 @@
 /*
  * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this
- * list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * Neither the name of ARM nor the names of its contributors may be used
- * to endorse or promote products derived from this software without specific
- * prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arm_gic.h>
 #include <assert.h>
 #include <bl_common.h>
 #include <console.h>
+#include <coreboot.h>
 #include <debug.h>
 #include <gpio.h>
 #include <mmio.h>
-#include <platform.h>
 #include <plat_params.h>
 #include <plat_private.h>
+#include <platform.h>
 #include <string.h>
 
 static struct gpio_info param_reset;
@@ -108,8 +85,14 @@ void params_early_setup(void *plat_param_from_bl2)
 			       sizeof(struct bl31_apio_param));
 			suspend_apio = &param_apio.apio;
 			break;
+#if COREBOOT
+		case PARAM_COREBOOT_TABLE:
+			coreboot_table_setup((void *)
+				((struct bl31_u64_param *)bl2_param)->value);
+			break;
+#endif
 		default:
-			ERROR("not expected type found %ld\n",
+			ERROR("not expected type found %lld\n",
 			      bl2_param->type);
 			break;
 		}
